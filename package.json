@@ -1,0 +1,25 @@
+{
+  "name": "test-jihed--of-18-02-2026-pdf-svg-v9-14:34-vector",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "tsc --noEmit",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lucide-react": "^0.563.0",
+    "react-dom": "^19.2.4",
+    "react": "^19.2.4",
+    "xlsx": "0.18.5",
+    "jspdf": "^4.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
+  }
+}
