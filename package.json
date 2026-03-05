@@ -1,11 +1,12 @@
 {
-  "name": "test-for-jihed-19-02-2025-custom-size",
+  "name": "test-jihed--of-18-02-2026-pdf-svg-v9-14:34-vector",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "lint": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {

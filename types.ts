@@ -25,14 +25,6 @@ export interface TagStyle {
   isMultiline: boolean;
 }
 
-export interface CustomShape {
-  sourceType: "svg" | "pdf" | "ai" | "raster";
-  outlinePathD: string;          // Chemin SVG brut (coordonnées canoniques)
-  normalizedPathD: string;       // Chemin SVG normalisé (0..1) pour objectBoundingBox
-  viewBox: { minX: number; minY: number; w: number; h: number };
-  originalAspect: number;
-}
-
 export interface NametagItem {
   id: string;
   firstName: string;
@@ -40,6 +32,10 @@ export interface NametagItem {
   title: string;
   quantity: number;
   overrides?: Partial<TagStyle>;
+  logoLocked?: boolean;
+  logoVersion?: 'original' | 'vector';
+  vectorLogoXml?: string | null;
+  isVectorizing?: boolean;
   typoSuggestions?: {
     [key: string]: { 
       original: string;
@@ -64,6 +60,21 @@ export interface MetalFinish {
   supportsWhite: boolean;
 }
 
+export interface Layer {
+  id: string;
+  name: string;
+  visible: boolean;
+  locked: boolean;
+}
+
+export interface CustomShape {
+  sourceType: "svg" | "raster";
+  outlinePathD: string;
+  normalizedPathD: string;
+  viewBox: { minX: number; minY: number; w: number; h: number };
+  originalAspect: number;
+}
+
 export interface StudioState {
   items: NametagItem[];
   selectedIndex: number;
@@ -85,6 +96,8 @@ export interface StudioState {
   logoOffsetY: number;
   background: string | null;
   backgroundOpacity: number;
+  backgroundScale: number;
+  backgroundFit: 'fill' | 'fit' | 'stretch';
   globalStyle: TagStyle;
   isSameContent: boolean;
   dimensions: {
@@ -95,4 +108,5 @@ export interface StudioState {
   logoColor: string;
   isLogoVectorized: boolean;
   vectorLogoXml: string | null;
+  layers: Layer[];
 }
