@@ -1,20 +1,21 @@
 {
-  "name": "test-jihed--of-18-02-2026-pdf-svg-v9-14:34-vector",
+  "name": "test-for-jihed-19-02-2025-custom-size",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "lint": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
+    "html2canvas": "^1.4.1",
+    "jspdf": "^4.1.0",
     "lucide-react": "^0.563.0",
-    "react-dom": "^19.2.4",
+    "pdfjs-dist": "^5.5.207",
     "react": "^19.2.4",
-    "xlsx": "0.18.5",
-    "jspdf": "^4.1.0"
+    "react-dom": "^19.2.4",
+    "xlsx": "0.18.5"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

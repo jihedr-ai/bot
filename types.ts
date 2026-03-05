@@ -25,6 +25,14 @@ export interface TagStyle {
   isMultiline: boolean;
 }
 
+export interface CustomShape {
+  sourceType: "svg" | "pdf" | "ai" | "raster";
+  outlinePathD: string;          // Chemin SVG brut (coordonnées canoniques)
+  normalizedPathD: string;       // Chemin SVG normalisé (0..1) pour objectBoundingBox
+  viewBox: { minX: number; minY: number; w: number; h: number };
+  originalAspect: number;
+}
+
 export interface NametagItem {
   id: string;
   firstName: string;
@@ -32,10 +40,6 @@ export interface NametagItem {
   title: string;
   quantity: number;
   overrides?: Partial<TagStyle>;
-  logoLocked?: boolean;
-  logoVersion?: 'original' | 'vector';
-  vectorLogoXml?: string | null;
-  isVectorizing?: boolean;
   typoSuggestions?: {
     [key: string]: { 
       original: string;
@@ -65,6 +69,7 @@ export interface StudioState {
   selectedIndex: number;
   material: MaterialFamily;
   shape: ShapeType;
+  customShape: CustomShape | null;
   attachment: AttachmentType;
   metalFinish: string;
   metalThickness: '0.020' | '0.040';
