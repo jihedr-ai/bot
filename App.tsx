@@ -887,6 +887,58 @@ const App: React.FC = () => {
   const [exportLogoPng, setExportLogoPng] = useState<string | null>(null);
   const [coloredLogoUrl, setColoredLogoUrl] = useState<string | null>(null);
 
+  // -------------------- Magento Integration --------------------
+  const calculateTotalPrice = () => {
+    let base = state.material === MaterialFamily.METAL ? PRICING.METAL_BASE : PRICING.PLASTIC_BASE;
+    if (state.shape === ShapeType.CUSTOM) base += PRICING.CUSTOM_SHAPE_EXTRA;
+    if (state.attachment === AttachmentType.MAGNET) base += PRICING.MAGNET_EXTRA;
+    
+    const count = state.items.length;
+    let total = base * count;
+    
+    // Apply volume discounts
+    const discount = PRICING.DISCOUNTS.find(d => count >= d.min && count <= d.max);
+    if (discount) {
+      total = total * (1 - discount.rate);
+    }
+    
+    return total;
+  };
+
+  const handleAddToCart = () => {
+    const totalPrice = calculateTotalPrice();
+    const data = {
+      type: 'WETAG_ADD_TO_CART',
+      payload: {
+        sku: 'NAMETAG-CUSTOM', // Default SKU, should match Magento product
+        qty: state.items.length,
+        price: totalPrice / state.items.length,
+        totalPrice: totalPrice,
+        options: {
+          material: state.material,
+          finish_color: state.material === MaterialFamily.METAL ? state.metalFinish : state.plasticColor,
+          shape: state.shape,
+          dimensions: `${formatDimension(state.dimensions.width, state.dimensions.unit)}x${formatDimension(state.dimensions.height, state.dimensions.unit)}${state.dimensions.unit}`,
+          attachment: state.attachment,
+          items_list: state.items.map(i => `${i.firstName} ${i.lastName} (${i.title})`).join(' | '),
+          logo_url: state.logo ? "Logo inclus dans la configuration" : "Aucun logo",
+        },
+        // We can also send the full state for advanced processing
+        full_config: state
+      }
+    };
+    
+    // Send message to Magento parent window
+    if (window.parent !== window) {
+      window.parent.postMessage(data, '*');
+      // You can also trigger a visual feedback
+      alert("Votre configuration a été envoyée au panier Magento !");
+    } else {
+      console.log("Magento Integration Data:", data);
+      alert("Mode démo : Les données ont été générées (voir console). En production, cela ajouterait au panier Magento.");
+    }
+  };
+
   const activeErrorsCount = useMemo(() => {
     let count = 0;
     invalidIds.forEach((id) => {
@@ -2167,58 +2219,6 @@ const getLayoutClasses = () => {
   // -------------------- UI --------------------
   const isLogoVectorized = state.isLogoVectorized;
   const handleFinalExportDisabled = isExporting;
-
-  // -------------------- Magento Integration --------------------
-  const calculateTotalPrice = () => {
-    let base = state.material === MaterialFamily.METAL ? PRICING.METAL_BASE : PRICING.PLASTIC_BASE;
-    if (state.shape === ShapeType.CUSTOM) base += PRICING.CUSTOM_SHAPE_EXTRA;
-    if (state.attachment === AttachmentType.MAGNET) base += PRICING.MAGNET_EXTRA;
-    
-    const count = state.items.length;
-    let total = base * count;
-    
-    // Apply volume discounts
-    const discount = PRICING.DISCOUNTS.find(d => count >= d.min && count <= d.max);
-    if (discount) {
-      total = total * (1 - discount.rate);
-    }
-    
-    return total;
-  };
-
-  const handleAddToCart = () => {
-    const totalPrice = calculateTotalPrice();
-    const data = {
-      type: 'WETAG_ADD_TO_CART',
-      payload: {
-        sku: 'NAMETAG-CUSTOM', // Default SKU, should match Magento product
-        qty: state.items.length,
-        price: totalPrice / state.items.length,
-        totalPrice: totalPrice,
-        options: {
-          material: state.material,
-          finish_color: state.material === MaterialFamily.METAL ? state.metalFinish : state.plasticColor,
-          shape: state.shape,
-          dimensions: `${formatDimension(state.dimensions.width, state.dimensions.unit)}x${formatDimension(state.dimensions.height, state.dimensions.unit)}${state.dimensions.unit}`,
-          attachment: state.attachment,
-          items_list: state.items.map(i => `${i.firstName} ${i.lastName} (${i.title})`).join(' | '),
-          logo_url: state.logo ? "Logo inclus dans la configuration" : "Aucun logo",
-        },
-        // We can also send the full state for advanced processing
-        full_config: state
-      }
-    };
-    
-    // Send message to Magento parent window
-    if (window.parent !== window) {
-      window.parent.postMessage(data, '*');
-      // You can also trigger a visual feedback
-      alert("Votre configuration a été envoyée au panier Magento !");
-    } else {
-      console.log("Magento Integration Data:", data);
-      alert("Mode démo : Les données ont été générées (voir console). En production, cela ajouterait au panier Magento.");
-    }
-  };
 
   return (
     <div className="h-screen flex flex-col bg-[#f8fafc] overflow-hidden text-[#0f172a] font-medium">
