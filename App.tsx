@@ -43,6 +43,7 @@ import {
   Send,
   User,
   Sparkle,
+  ShoppingCart,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
@@ -62,7 +63,7 @@ import {
   NametagItem,
   StudioState,
 } from "./types";
-import { PLASTIC_COLORS, METAL_FINISHES, FONTS, DEFAULT_STYLE } from "./constants";
+import { PLASTIC_COLORS, METAL_FINISHES, FONTS, DEFAULT_STYLE, PRICING } from "./constants";
 
 // -------------------- Unit Conversion Helpers --------------------
 const IN_TO_MM = 25.4;
@@ -2167,6 +2168,58 @@ const getLayoutClasses = () => {
   const isLogoVectorized = state.isLogoVectorized;
   const handleFinalExportDisabled = isExporting;
 
+  // -------------------- Magento Integration --------------------
+  const calculateTotalPrice = () => {
+    let base = state.material === MaterialFamily.METAL ? PRICING.METAL_BASE : PRICING.PLASTIC_BASE;
+    if (state.shape === ShapeType.CUSTOM) base += PRICING.CUSTOM_SHAPE_EXTRA;
+    if (state.attachment === AttachmentType.MAGNET) base += PRICING.MAGNET_EXTRA;
+    
+    const count = state.items.length;
+    let total = base * count;
+    
+    // Apply volume discounts
+    const discount = PRICING.DISCOUNTS.find(d => count >= d.min && count <= d.max);
+    if (discount) {
+      total = total * (1 - discount.rate);
+    }
+    
+    return total;
+  };
+
+  const handleAddToCart = () => {
+    const totalPrice = calculateTotalPrice();
+    const data = {
+      type: 'WETAG_ADD_TO_CART',
+      payload: {
+        sku: 'NAMETAG-CUSTOM', // Default SKU, should match Magento product
+        qty: state.items.length,
+        price: totalPrice / state.items.length,
+        totalPrice: totalPrice,
+        options: {
+          material: state.material,
+          finish_color: state.material === MaterialFamily.METAL ? state.metalFinish : state.plasticColor,
+          shape: state.shape,
+          dimensions: `${formatDimension(state.dimensions.width, state.dimensions.unit)}x${formatDimension(state.dimensions.height, state.dimensions.unit)}${state.dimensions.unit}`,
+          attachment: state.attachment,
+          items_list: state.items.map(i => `${i.firstName} ${i.lastName} (${i.title})`).join(' | '),
+          logo_url: state.logo ? "Logo inclus dans la configuration" : "Aucun logo",
+        },
+        // We can also send the full state for advanced processing
+        full_config: state
+      }
+    };
+    
+    // Send message to Magento parent window
+    if (window.parent !== window) {
+      window.parent.postMessage(data, '*');
+      // You can also trigger a visual feedback
+      alert("Votre configuration a été envoyée au panier Magento !");
+    } else {
+      console.log("Magento Integration Data:", data);
+      alert("Mode démo : Les données ont été générées (voir console). En production, cela ajouterait au panier Magento.");
+    }
+  };
+
   return (
     <div className="h-screen flex flex-col bg-[#f8fafc] overflow-hidden text-[#0f172a] font-medium">
       {/* Validator grid (offscreen but still renderable) */}
@@ -2208,6 +2261,21 @@ const getLayoutClasses = () => {
         </div>
 
         <div className="flex items-center gap-4">
+          <div className="flex items-center px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 shadow-inner">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-3">Total</span>
+            <span className="text-lg font-black text-indigo-600">{calculateTotalPrice().toFixed(2)}€</span>
+          </div>
+
+          <button
+            onClick={handleAddToCart}
+            className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase shadow-xl hover:bg-emerald-700 active:scale-95 transition-all"
+          >
+            <ShoppingCart size={18} />
+            Ajouter au Panier
+          </button>
+
+          <div className="w-px h-8 bg-slate-200 mx-2" />
+
           <div className="flex items-center gap-2 bg-slate-100 p-1 rounded-xl">
             <button
               onClick={() => setExportFormat("pdf")}
