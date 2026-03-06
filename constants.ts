@@ -6,17 +6,17 @@ import {
 
 export const PLASTIC_COLORS: PlasticColor[] = [
   { name: 'Noir / Blanc', code: 'LM 922402', bgColor: '#000000', textColor: '#ffffff' },
-  { name: 'Cerisier / Blanc', code: '922152', bgColor: '#8b0000', textColor: '#ffffff' },
+  { name: 'Cerisier / Blanc', code: '922152', bgColor: '#4a0404', textColor: '#ffffff' },
+  { name: 'Kona / Blanc', code: 'LM 922012', bgColor: '#3d2b1f', textColor: '#ffffff' },
+  { name: 'Kona / Cendre', code: 'LM 922082', bgColor: '#3d2b1f', textColor: '#c0c0c0' },
+  { name: 'Cannelle / Blanc', code: 'LM 922222', bgColor: '#d2691e', textColor: '#ffffff' },
+  { name: 'Cannelle / Cendre', code: 'LM 922022', bgColor: '#d2691e', textColor: '#c0c0c0' },
+  { name: 'Cajou / Noir', code: 'LM 922124', bgColor: '#d2b48c', textColor: '#000000' },
+  { name: 'Cajou / Taupe', code: 'LM 922120', bgColor: '#d2b48c', textColor: '#483c32' },
   { name: 'Blanc / Noir', code: 'LM 9222204', bgColor: '#ffffff', textColor: '#000000' },
   { name: 'Or Européen / Noir', code: 'LM 922754', bgColor: '#cfb53b', textColor: '#000000' },
   { name: 'Bleu Patriote / Blanc', code: 'LM 922552', bgColor: '#002868', textColor: '#ffffff' },
-  { name: 'Brossé Argent / Noir', code: 'LM 922334', bgColor: '#c0c0c0', textColor: '#000000' },
-  { name: 'Brossé Or / Noir', code: 'LM 922734', bgColor: '#d4af37', textColor: '#000000' },
   { name: 'Vert Kelly / Blanc', code: 'LM 922932', bgColor: '#008000', textColor: '#ffffff' },
-  { name: 'Rouge Crimson / Blanc', code: 'LM 922602', bgColor: '#dc143c', textColor: '#ffffff' },
-  { name: 'Jaune Canari / Noir', code: 'LM 922704', bgColor: '#ffef00', textColor: '#000000' },
-  { name: 'Gris Fumée / Blanc', code: 'LM 922312', bgColor: '#708090', textColor: '#ffffff' },
-  { name: 'Cramoisi / Or', code: 'LM 922607', bgColor: '#990000', textColor: '#ffd700' },
 ];
 
 export const METAL_FINISHES: MetalFinish[] = [

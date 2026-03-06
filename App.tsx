@@ -39,11 +39,16 @@ import {
   SlidersHorizontal,
   X,
   Scissors,
+  Bot,
+  Send,
+  User,
+  Sparkle,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import * as pdfjs from "pdfjs-dist";
+import { GoogleGenAI } from "@google/genai";
 
 // Initialize PDF.js worker using the version from the package
 const PDFJS_VERSION = "5.5.207";
@@ -575,7 +580,8 @@ const NametagSvg: React.FC<{
   noGradient?: boolean;
   titleWeight?: string;
   logoOverride?: string | null;
-}> = ({ item, state, logoRatio, isPrint = false, id, noGradient = false, titleWeight = "500", logoOverride }) => {
+  coloredLogoUrl?: string | null;
+}> = ({ item, state, logoRatio, isPrint = false, id, noGradient = false, titleWeight = "500", logoOverride, coloredLogoUrl }) => {
   const isCustom = state.shape === ShapeType.CUSTOM && !!state.customShape;
   const style = {
     ...state.globalStyle,
@@ -591,6 +597,8 @@ const NametagSvg: React.FC<{
   const plastic = PLASTIC_COLORS.find((c) => c.name === state.plasticColor) || PLASTIC_COLORS[0];
   const bgColor = state.material === MaterialFamily.METAL ? finish.bgColor : plastic.bgColor;
   const bgGradient = (state.material === MaterialFamily.METAL && !noGradient) ? finish.gradient : "none";
+  const finalNameColor = state.material === MaterialFamily.PLASTIC ? plastic.textColor : style.nameColor;
+  const finalTitleColor = state.material === MaterialFamily.PLASTIC ? plastic.textColor : style.titleColor;
 
   const pad = mmToIn(state.logoMargin) * dpi;
   const gap = state.logo ? state.logoGap : 0;
@@ -772,7 +780,7 @@ const NametagSvg: React.FC<{
               />
             ) : parsedLogo ? (
               <g
-                fill={state.logoColor}
+                fill={state.material === MaterialFamily.PLASTIC ? plastic.textColor : state.logoColor}
                 transform={`scale(${lW / parsedLogo.vbW}, ${lH / parsedLogo.vbH}) translate(${-parsedLogo.vbX}, ${-parsedLogo.vbY})`}
                 dangerouslySetInnerHTML={{ __html: parsedLogo.inner }}
               />
@@ -782,8 +790,8 @@ const NametagSvg: React.FC<{
                 y="0" 
                 width={lW} 
                 height={lH} 
-                href={state.logo} 
-                xlinkHref={state.logo} 
+                href={state.material === MaterialFamily.PLASTIC ? (coloredLogoUrl || state.logo) : state.logo} 
+                xlinkHref={state.material === MaterialFamily.PLASTIC ? (coloredLogoUrl || state.logo) : state.logo} 
                 preserveAspectRatio="xMidYMid meet" 
                 overflow="visible"
               />
@@ -800,7 +808,7 @@ const NametagSvg: React.FC<{
           style.fontFamily,
           style.bold ? "900" : "700",
           anchor,
-          style.nameColor
+          finalNameColor
         )}
         {buildSvgTextWithTspans(
           fit.tFit.lines,
@@ -811,7 +819,7 @@ const NametagSvg: React.FC<{
           style.fontFamily,
           titleWeight,
           anchor,
-          style.titleColor
+          finalTitleColor
         )}
       </g>
     </svg>
@@ -876,6 +884,7 @@ const App: React.FC = () => {
 
   // IMPORTANT FIX: raster logo to PNG for html2canvas export reliability
   const [exportLogoPng, setExportLogoPng] = useState<string | null>(null);
+  const [coloredLogoUrl, setColoredLogoUrl] = useState<string | null>(null);
 
   const activeErrorsCount = useMemo(() => {
     let count = 0;
@@ -934,11 +943,12 @@ const App: React.FC = () => {
 
     const run = async () => {
       try {
-        if (!state.logo) {
+        const logoToRasterize = state.material === MaterialFamily.PLASTIC ? coloredLogoUrl : state.logo;
+        if (!logoToRasterize) {
           setExportLogoPng(null);
           return;
         }
-        const png = await rasterizeToPngDataUrl(state.logo, 1600);
+        const png = await rasterizeToPngDataUrl(logoToRasterize, 1600);
         if (!cancelled) setExportLogoPng(png);
       } catch (e) {
         console.warn("[exportLogoPng] rasterize failed", e);
@@ -950,7 +960,7 @@ const App: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [state.logo, state.vectorLogoXml, state.logoColor]);
+  }, [state.logo, state.vectorLogoXml, state.logoColor, state.material, coloredLogoUrl]);
 
   const rosterData = useMemo(() => {
     const firstNames = Array.from(new Set(state.items.map((i) => i.firstName).filter((v) => v)));
@@ -962,20 +972,84 @@ const App: React.FC = () => {
   const recolorSvg = (svgXml: string, color: string): string => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgXml, "image/svg+xml");
+    const svg = doc.documentElement;
+    svg.setAttribute("fill", color);
     const elements = doc.querySelectorAll("path, rect, circle, ellipse, polygon, polyline, text");
     elements.forEach((el) => {
       const fill = el.getAttribute("fill");
       const stroke = el.getAttribute("stroke");
-      if (fill && fill !== "none") el.setAttribute("fill", "currentColor");
-      if (stroke && stroke !== "none") el.setAttribute("stroke", "currentColor");
-      el.removeAttribute("style");
+      if (fill && fill !== "none") el.setAttribute("fill", color);
+      if (stroke && stroke !== "none") el.setAttribute("stroke", color);
+      const style = el.getAttribute("style");
+      if (style) {
+        const newStyle = style.replace(/fill:[^;]+/g, `fill:${color}`).replace(/stroke:[^;]+/g, `stroke:${color}`);
+        el.setAttribute("style", newStyle);
+      }
     });
     return new XMLSerializer().serializeToString(doc);
   };
 
+  useEffect(() => {
+    if (!state.logo) {
+      setColoredLogoUrl(null);
+      return;
+    }
+
+    if (state.material !== MaterialFamily.PLASTIC) {
+      setColoredLogoUrl(state.logo);
+      return;
+    }
+
+    const plastic = PLASTIC_COLORS.find((c) => c.name === state.plasticColor) || PLASTIC_COLORS[0];
+    const targetColor = plastic.textColor;
+
+    let isMounted = true;
+
+    const recolor = async () => {
+      try {
+        if (state.logo!.startsWith("data:image/svg+xml")) {
+          const base64 = state.logo!.split(",")[1];
+          const xml = decodeURIComponent(escape(atob(base64)));
+          const newXml = recolorSvg(xml, targetColor);
+          const newUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(newXml)));
+          if (isMounted) setColoredLogoUrl(newUrl);
+        } else {
+          const img = new Image();
+          img.crossOrigin = "anonymous";
+          img.src = state.logo!;
+          await new Promise((resolve, reject) => {
+            img.onload = resolve;
+            img.onerror = reject;
+          });
+          const canvas = document.createElement("canvas");
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext("2d");
+          if (!ctx) return;
+          ctx.drawImage(img, 0, 0);
+          ctx.globalCompositeOperation = "source-in";
+          ctx.fillStyle = targetColor;
+          ctx.fillRect(0, 0, canvas.width, canvas.height);
+          if (isMounted) setColoredLogoUrl(canvas.toDataURL("image/png"));
+        }
+      } catch (e) {
+        console.error("Failed to recolor logo", e);
+        if (isMounted) setColoredLogoUrl(state.logo);
+      }
+    };
+
+    recolor();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [state.logo, state.material, state.plasticColor]);
+
   function applyLogoFilters(svgXml: string) {
     const parser = new DOMParser();
     const doc = parser.parseFromString(svgXml, "image/svg+xml");
+    const svg = doc.documentElement;
+    svg.setAttribute("fill", "currentColor");
     const elements = doc.querySelectorAll("rect, path, circle, polygon, ellipse");
     elements.forEach((el) => {
       const fill = el.getAttribute("fill");
@@ -1481,6 +1555,65 @@ const App: React.FC = () => {
 
   // -------------------- Import --------------------
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAiOpen, setIsAiOpen] = useState(false);
+  const [aiMessages, setAiMessages] = useState<{ role: "user" | "model"; text: string }[]>([]);
+  const [aiInput, setAiInput] = useState("");
+  const [isAiLoading, setIsAiLoading] = useState(false);
+  const aiChatRef = useRef<HTMLDivElement>(null);
+
+  const handleAiChat = async () => {
+    if (!aiInput.trim() || isAiLoading) return;
+
+    const userMsg = aiInput.trim();
+    setAiInput("");
+    setAiMessages((prev) => [...prev, { role: "user", text: userMsg }]);
+    setIsAiLoading(true);
+
+    try {
+      const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+      const model = genAI.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `Tu es l'assistant expert de Wetag Studio. Voici l'état actuel de la configuration du badge :
+                - Matériau : ${state.material === MaterialFamily.METAL ? "Métal (" + state.metalFinish + ")" : "Plastique (" + state.plasticColor + ")"}
+                - Forme : ${state.shape === ShapeType.STANDARD ? "Standard" : "Sur Mesure"}
+                - Dimensions : ${state.dimensions.width}x${state.dimensions.height} ${state.dimensions.unit}
+                - Attache : ${state.attachment === AttachmentType.MAGNET ? "Magnétique" : "Épingle"}
+                - Nombre de badges : ${state.items.length}
+                - Badge actuel : ${currentItem.firstName} ${currentItem.lastName} (${currentItem.title})
+                
+                Note importante : Pour le matériau Plastique, l'aperçu à l'écran affiche les couleurs que l'utilisateur a choisies. Cependant, lors de l'exportation (SVG/PDF), les couleurs du texte sont automatiquement forcées à la couleur de gravure réelle du plastique (${state.material === MaterialFamily.PLASTIC ? PLASTIC_COLORS.find(c => c.name === state.plasticColor)?.textColor : "N/A"}) pour garantir un fichier de production correct.
+                
+                Réponds de manière concise et professionnelle.`,
+              },
+              ...aiMessages.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
+              { role: "user", parts: [{ text: userMsg }] },
+            ],
+          },
+        ],
+      });
+
+      const response = await model;
+      const text = response.text || "Désolé, je n'ai pas pu générer de réponse.";
+      setAiMessages((prev) => [...prev, { role: "model", text }]);
+    } catch (error) {
+      console.error("AI Error:", error);
+      setAiMessages((prev) => [...prev, { role: "model", text: "Une erreur est survenue lors de la communication avec l'IA." }]);
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (aiChatRef.current) {
+      aiChatRef.current.scrollTop = aiChatRef.current.scrollHeight;
+    }
+  }, [aiMessages]);
+
   const [importData, setImportData] = useState<any[]>([]);
   const [mapping, setMapping] = useState<{ [key: string]: any }>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1761,6 +1894,8 @@ const App: React.FC = () => {
     const style = getActiveStyle(item);
     const bgColor = state.material === MaterialFamily.METAL ? finish.bgColor : plastic.bgColor;
     const bgStyle = state.material === MaterialFamily.METAL ? finish.gradient : "none";
+    const finalNameColor = state.material === MaterialFamily.PLASTIC ? plastic.textColor : style.nameColor;
+    const finalTitleColor = state.material === MaterialFamily.PLASTIC ? plastic.textColor : style.titleColor;
 
     const containerRef = useRef<HTMLDivElement>(null);
     const nameRef = useRef<HTMLHeadingElement>(null);
@@ -1920,9 +2055,7 @@ const getLayoutClasses = () => {
     // CRITICAL FIX: for print/export we force a PNG-painted image
     const logoSrcForRender = isPrint
       ? exportLogoPng || state.logo
-      : (item as any).logoVersion === "vector" && activeVectorDataUrl
-      ? activeVectorDataUrl
-      : state.logo;
+      : coloredLogoUrl || state.logo;
 
     return (
       <div
@@ -1990,7 +2123,7 @@ const getLayoutClasses = () => {
                 fontFamily: style.fontFamily,
                 fontSize: isPrint ? `${style.nameSize / 100}in` : `${style.nameSize * scale}px`,
                 fontWeight: style.bold ? 900 : 700,
-                color: style.nameColor,
+                color: finalNameColor,
                 textAlign: style.alignment,
               }}
             >
@@ -2003,7 +2136,7 @@ const getLayoutClasses = () => {
               style={{
                 fontFamily: style.fontFamily,
                 fontSize: isPrint ? `${style.titleSize / 100}in` : `${style.titleSize * scale}px`,
-                color: style.titleColor,
+                color: finalTitleColor,
                 textAlign: style.alignment,
               }}
             >
@@ -2046,14 +2179,14 @@ const getLayoutClasses = () => {
       {/* Print grid: IMPORTANT: DO NOT set opacity-0 (it makes html2canvas capture transparent) */}
       <div id="bat-grid-container" className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
         {state.items.map((item) => (
-          <NametagSvg key={`p-${item.id}`} item={item} state={state} logoRatio={logoRatio} id={`badge-svg-print-${item.id}`} titleWeight="500" />
+          <NametagSvg key={`p-${item.id}`} item={item} state={state} logoRatio={logoRatio} id={`badge-svg-print-${item.id}`} titleWeight="500" coloredLogoUrl={coloredLogoUrl} />
         ))}
       </div>
 
       {/* SVG Export grid (no gradients, bolder title as requested) */}
       <div id="svg-export-container" className="fixed -left-[9999px] top-0 pointer-events-none" aria-hidden="true">
         {state.items.map((item) => (
-          <NametagSvg key={`s-${item.id}`} item={item} state={state} logoRatio={logoRatio} id={`badge-svg-export-${item.id}`} noGradient={true} titleWeight="600" />
+          <NametagSvg key={`s-${item.id}`} item={item} state={state} logoRatio={logoRatio} id={`badge-svg-export-${item.id}`} noGradient={true} titleWeight="600" coloredLogoUrl={coloredLogoUrl} />
         ))}
       </div>
 
@@ -2427,28 +2560,57 @@ const getLayoutClasses = () => {
                 </section>
 
                 <section>
-                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">Finition & Rendu</label>
-                  <div className="grid grid-cols-2 gap-4">
-                    {METAL_FINISHES.map((f) => (
-                      <button
-                        key={f.name}
-                        onClick={() => updateState({ metalFinish: f.name })}
-                        className={`group relative h-24 rounded-[1.5rem] border-2 transition-all duration-300 overflow-hidden flex items-center justify-center ${
-                          state.metalFinish === f.name ? "border-indigo-600 shadow-xl" : "border-slate-100 hover:border-slate-300"
-                        }`}
-                      >
-                        <div className="absolute inset-0 transition-transform duration-500 group-hover:scale-110" style={{ background: f.gradient !== "none" ? f.gradient : f.bgColor }} />
-                        {state.metalFinish === f.name && (
-                          <div className="absolute top-3 right-3 text-indigo-600 z-10">
-                            <CheckCircle size={16} fill="currentColor" className="text-white" />
-                          </div>
-                        )}
-                        <span className="relative bg-white/90 backdrop-blur-sm px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-900 shadow-sm border border-white/50">
-                          {f.name.replace(/\s/g, "")}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">
+                    {state.material === MaterialFamily.METAL ? "Finition & Rendu" : "Couleur Plastique"}
+                  </label>
+                  {state.material === MaterialFamily.METAL ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      {METAL_FINISHES.map((f) => (
+                        <button
+                          key={f.name}
+                          onClick={() => updateState({ metalFinish: f.name })}
+                          className={`group relative h-24 rounded-[1.5rem] border-2 transition-all duration-300 overflow-hidden flex items-center justify-center ${
+                            state.metalFinish === f.name ? "border-indigo-600 shadow-xl" : "border-slate-100 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="absolute inset-0 transition-transform duration-500 group-hover:scale-110" style={{ background: f.gradient !== "none" ? f.gradient : f.bgColor }} />
+                          {state.metalFinish === f.name && (
+                            <div className="absolute top-3 right-3 text-indigo-600 z-10">
+                              <CheckCircle size={16} fill="currentColor" className="text-white" />
+                            </div>
+                          )}
+                          <span className="relative bg-white/90 backdrop-blur-sm px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-900 shadow-sm border border-white/50">
+                            {f.name.replace(/\s/g, "")}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-4 max-h-[400px] overflow-y-auto pr-2 pb-2">
+                      {PLASTIC_COLORS.map((c) => (
+                        <button
+                          key={c.name}
+                          onClick={() => updateState({ plasticColor: c.name })}
+                          className={`group relative h-24 rounded-[1.5rem] border-2 transition-all duration-300 overflow-hidden flex flex-col items-center justify-center ${
+                            state.plasticColor === c.name ? "border-indigo-600 shadow-xl" : "border-slate-100 hover:border-slate-300"
+                          }`}
+                        >
+                          <div className="absolute inset-0 transition-transform duration-500 group-hover:scale-110" style={{ backgroundColor: c.bgColor }} />
+                          {state.plasticColor === c.name && (
+                            <div className="absolute top-3 right-3 text-indigo-600 z-10">
+                              <CheckCircle size={16} fill="currentColor" className="text-white" />
+                            </div>
+                          )}
+                          <span className="relative bg-white/90 backdrop-blur-sm px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-900 shadow-sm border border-white/50 mb-1">
+                            {c.name}
+                          </span>
+                          <span className="relative bg-white/90 backdrop-blur-sm px-2 py-1 rounded-lg text-[8px] font-bold uppercase text-slate-500">
+                            {c.code}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </section>
 
                 <section>
@@ -2920,6 +3082,80 @@ const getLayoutClasses = () => {
           <Cpu size={12} className="text-indigo-600 shadow-lg shadow-indigo-500/50" /> WETAG STUDIO PRO — VECTEURS GARANTIS
         </div>
       </footer>
+
+      {/* AI ASSISTANT */}
+      <div className="fixed bottom-16 right-6 z-[60] flex flex-col items-end gap-4">
+        {isAiOpen && (
+          <div className="w-80 h-[450px] bg-white rounded-3xl shadow-2xl border border-slate-200 flex flex-col overflow-hidden animate-in fade-in slide-in-from-bottom-4">
+            <header className="p-4 bg-indigo-600 text-white flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Bot size={20} />
+                <span className="text-xs font-black uppercase tracking-widest">Assistant Wetag</span>
+              </div>
+              <button onClick={() => setIsAiOpen(false)} className="p-1 hover:bg-white/20 rounded-lg transition-all">
+                <X size={16} />
+              </button>
+            </header>
+            <div ref={aiChatRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
+              {aiMessages.length === 0 && (
+                <div className="text-center py-10 space-y-4">
+                  <div className="w-12 h-12 bg-indigo-100 text-indigo-600 rounded-2xl flex items-center justify-center mx-auto">
+                    <Sparkle size={24} />
+                  </div>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4">
+                    Posez-moi vos questions sur votre configuration ou demandez des conseils.
+                  </p>
+                </div>
+              )}
+              {aiMessages.map((m, i) => (
+                <div key={i} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[85%] p-3 rounded-2xl text-[11px] leading-relaxed ${
+                      m.role === "user" ? "bg-indigo-600 text-white rounded-tr-none" : "bg-white border text-slate-700 rounded-tl-none shadow-sm"
+                    }`}
+                  >
+                    {m.text}
+                  </div>
+                </div>
+              ))}
+              {isAiLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-white border p-3 rounded-2xl rounded-tl-none shadow-sm flex gap-1">
+                    <div className="w-1 h-1 bg-slate-300 rounded-full animate-bounce" />
+                    <div className="w-1 h-1 bg-slate-300 rounded-full animate-bounce [animation-delay:0.2s]" />
+                    <div className="w-1 h-1 bg-slate-300 rounded-full animate-bounce [animation-delay:0.4s]" />
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-3 border-t bg-white flex gap-2">
+              <input
+                type="text"
+                value={aiInput}
+                onChange={(e) => setAiInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAiChat()}
+                placeholder="Votre question..."
+                className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-2 text-xs outline-none focus:ring-2 ring-indigo-500/20"
+              />
+              <button
+                onClick={handleAiChat}
+                disabled={isAiLoading}
+                className="p-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition-all disabled:opacity-50"
+              >
+                <Send size={16} />
+              </button>
+            </div>
+          </div>
+        )}
+        <button
+          onClick={() => setIsAiOpen(!isAiOpen)}
+          className={`w-14 h-14 rounded-full flex items-center justify-center shadow-2xl transition-all hover:scale-110 active:scale-95 ${
+            isAiOpen ? "bg-white text-indigo-600 border border-slate-200" : "bg-indigo-600 text-white"
+          }`}
+        >
+          {isAiOpen ? <X size={24} /> : <Bot size={28} />}
+        </button>
+      </div>
 
       {/* IMPORT MODAL */}
       {isImportModalOpen && (
