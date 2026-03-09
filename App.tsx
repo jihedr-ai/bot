@@ -1008,7 +1008,7 @@ const App: React.FC = () => {
       const data = {
         type: 'WETAG_ADD_TO_CART',
         payload: {
-          sku: 'file',
+          sku: 'TEST-SIMPLE',
           qty: state.items.length,
           price: (totalPrice / state.items.length).toFixed(2),
           totalPrice: totalPrice.toFixed(2),
