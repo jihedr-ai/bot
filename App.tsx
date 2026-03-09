@@ -876,6 +876,7 @@ const App: React.FC = () => {
 
   const [isIndividualMode, setIsIndividualMode] = useState(false);
   const [isVectorizing, setIsVectorizing] = useState(false);
+  const [showProof, setShowProof] = useState(false);
 
   const [widthInput, setWidthInput] = useState(formatDimension(76.2, "in"));
   const [heightInput, setHeightInput] = useState(formatDimension(38.1, "in"));
@@ -903,6 +904,67 @@ const App: React.FC = () => {
     }
     
     return total;
+  };
+
+  // -------------------- Export Helpers --------------------
+  const normalizeAssetToDataUrl = async (url: string | null): Promise<string | null> => {
+    if (!url) return null;
+    if (url.startsWith("data:")) return url;
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.warn("[EXPORT] Asset normalization failed for", url, e);
+      return url;
+    }
+  };
+
+  const buildExportSnapshot = async () => {
+    const logoData = await normalizeAssetToDataUrl(coloredLogoUrl || state.logo);
+    const backgroundData = await normalizeAssetToDataUrl(state.background);
+
+    return {
+      meta: {
+        unit: state.dimensions.unit,
+        dpi: 72,
+        timestamp: Date.now(),
+      },
+      items: state.items.map((item) => ({
+        id: item.id,
+        firstName: item.firstName,
+        lastName: item.lastName,
+        title: item.title,
+        style: getActiveStyle(item),
+      })),
+      settings: {
+        dimensions: state.dimensions,
+        cornerRadius: state.cornerRadius,
+        roundedCorners: state.roundedCorners,
+        logo: {
+          data: logoData,
+          scale: state.logoScale,
+          gap: state.logoGap,
+          margin: state.logoMargin,
+          offsetX: state.logoOffsetX,
+          offsetY: state.logoOffsetY,
+          pos: state.logoPos,
+          ratio: logoRatio,
+        },
+        background: {
+          data: backgroundData,
+          opacity: state.backgroundOpacity,
+        },
+        material: state.material,
+        metalFinish: state.metalFinish,
+        plasticColor: state.plasticColor,
+      },
+    };
   };
 
   const handleAddToCart = async () => {
