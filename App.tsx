@@ -905,37 +905,73 @@ const App: React.FC = () => {
     return total;
   };
 
-  const handleAddToCart = () => {
-    const totalPrice = calculateTotalPrice();
-    const data = {
-      type: 'WETAG_ADD_TO_CART',
-      payload: {
-        sku: 'NAMETAG-CUSTOM', // Default SKU, should match Magento product
-        qty: state.items.length,
-        price: totalPrice / state.items.length,
-        totalPrice: totalPrice,
-        options: {
-          material: state.material,
-          finish_color: state.material === MaterialFamily.METAL ? state.metalFinish : state.plasticColor,
-          shape: state.shape,
-          dimensions: `${formatDimension(state.dimensions.width, state.dimensions.unit)}x${formatDimension(state.dimensions.height, state.dimensions.unit)}${state.dimensions.unit}`,
-          attachment: state.attachment,
-          items_list: state.items.map(i => `${i.firstName} ${i.lastName} (${i.title})`).join(' | '),
-          logo_url: state.logo ? "Logo inclus dans la configuration" : "Aucun logo",
-        },
-        // We can also send the full state for advanced processing
-        full_config: state
+  const handleAddToCart = async () => {
+    setIsExporting(true);
+    try {
+      // 1. Générer le PDF en arrière-plan (sans le télécharger)
+      const snapshot = await buildExportSnapshot();
+      const wasProofShowing = showProof;
+      if (!wasProofShowing) {
+        setShowProof(true);
+        await new Promise(r => setTimeout(r, 1000));
       }
-    };
-    
-    // Send message to Magento parent window
-    if (window.parent !== window) {
-      window.parent.postMessage(data, '*');
-      // You can also trigger a visual feedback
-      alert("Votre configuration a été envoyée au panier Magento !");
-    } else {
-      console.log("Magento Integration Data:", data);
-      alert("Mode démo : Les données ont été générées (voir console). En production, cela ajouterait au panier Magento.");
+      
+      await waitAssetsReady("bat-grid-container");
+      const container = document.getElementById("bat-grid-container");
+      const items = container?.querySelectorAll('.badge-render') || [];
+      
+      const doc = new jsPDF({ orientation: 'p', unit: 'in', format: 'a4' });
+      const badgeW = mmToIn(snapshot.settings.dimensions.width);
+      const badgeH = mmToIn(snapshot.settings.dimensions.height);
+      const margin = 0.5;
+      let xPos = margin;
+      let yPos = margin;
+
+      const h2c = (window as any).html2canvas;
+      for (let i = 0; i < snapshot.items.length; i++) {
+        const el = document.getElementById(`badge-print-${snapshot.items[i].id}`);
+        if (!el) continue;
+        const canvas = await h2c(el, { scale: 3, useCORS: true, logging: false });
+        const imgData = canvas.toDataURL('image/png');
+        doc.addImage(imgData, 'PNG', xPos, yPos, badgeW, badgeH);
+        xPos += badgeW + margin;
+        if (xPos + badgeW > 7.8) { xPos = margin; yPos += badgeH + margin; if (yPos + badgeH > 10.5 && i < snapshot.items.length - 1) { doc.addPage(); yPos = margin; } }
+      }
+
+      // 2. Récupérer le PDF en format Base64
+      const pdfBase64 = doc.output('datauristring');
+
+      // 3. Préparer le message pour Magento
+      const totalPrice = calculateTotalPrice();
+      const data = {
+        type: 'WETAG_ADD_TO_CART',
+        payload: {
+          sku: 'CT-01',
+          qty: state.items.length,
+          price: (totalPrice / state.items.length).toFixed(2),
+          totalPrice: totalPrice.toFixed(2),
+          fileData: pdfBase64, // Le fichier PDF
+          fileName: `badge_config_${Date.now()}.pdf`,
+          options: {
+            'Configuration': `Matériau: ${state.material}, Finition: ${state.material === MaterialFamily.METAL ? state.metalFinish : state.plasticColor}, Quantité: ${state.items.length} badges.`,
+            'Liste des noms': state.items.map(i => `${i.firstName} ${i.lastName}`).join(' | ')
+          }
+        }
+      };
+
+      if (window.parent !== window) {
+        window.parent.postMessage(data, '*');
+      } else {
+        console.log("Magento Data:", data);
+        alert("Mode démo : Fichier généré et prêt à être envoyé.");
+      }
+
+      if (!wasProofShowing) setShowProof(false);
+    } catch (err) {
+      console.error("Erreur lors de la préparation du panier", err);
+      alert("Erreur lors de la préparation des fichiers.");
+    } finally {
+      setIsExporting(false);
     }
   };
 
