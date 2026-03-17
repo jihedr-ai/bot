@@ -109,4 +109,5 @@ export interface StudioState {
   isLogoVectorized: boolean;
   vectorLogoXml: string | null;
   layers: Layer[];
+  reorderCode: string;
 }

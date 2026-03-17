@@ -594,6 +594,9 @@ const NametagSvg: React.FC<{
   const bH = mmToIn(state.dimensions.height) * dpi;
   const rx = state.roundedCorners ? mmToIn(state.cornerRadius) * dpi : 0;
 
+  const isBrushed = (state.material === MaterialFamily.METAL && state.metalFinish.toLowerCase().includes("brossé")) ||
+                    (state.material === MaterialFamily.PLASTIC && state.plasticColor.toLowerCase().includes("brossé"));
+
   const finish = METAL_FINISHES.find((f) => f.name === state.metalFinish) || METAL_FINISHES[0];
   const plastic = PLASTIC_COLORS.find((c) => c.name === state.plasticColor) || PLASTIC_COLORS[0];
   const bgColor = state.material === MaterialFamily.METAL ? finish.bgColor : plastic.bgColor;
@@ -746,12 +749,26 @@ const NametagSvg: React.FC<{
           )}
         </clipPath>
         {bgGradient !== "none" && parseCssGradientToSvg(bgGradient, `grad-${item.id}`)}
+        {isBrushed && (
+          <filter id={`brushed-${item.id}`} x="0" y="0" width="100%" height="100%">
+            <feTurbulence type="fractalNoise" baseFrequency="0.001 0.9" numOctaves="4" result="noise" />
+            <feColorMatrix type="saturate" values="0" result="desturatedNoise" />
+            <feColorMatrix in="desturatedNoise" type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0.4 0" result="softNoise" />
+            <feBlend in="SourceGraphic" in2="softNoise" mode="multiply" />
+            <feComposite in2="SourceGraphic" operator="in" />
+          </filter>
+        )}
       </defs>
       {parsedLogo?.defs && (
         <defs dangerouslySetInnerHTML={{ __html: parsedLogo.defs }} />
       )}
       <g clipPath={`url(#clip-${item.id})`}>
-        <rect width={bW} height={bH} fill={bgGradient !== "none" ? `url(#grad-${item.id})` : bgColor} />
+        <rect 
+          width={bW} 
+          height={bH} 
+          fill={bgGradient !== "none" ? `url(#grad-${item.id})` : bgColor} 
+          filter={isBrushed ? `url(#brushed-${item.id})` : undefined}
+        />
         {state.background && (
           <image
             x="0"
@@ -859,6 +876,7 @@ const App: React.FC = () => {
     logoColor: "#000000",
     isLogoVectorized: false,
     vectorLogoXml: null,
+    reorderCode: Math.floor(100000 + Math.random() * 900000).toString(),
   });
 
   const updateState = (updates: Partial<StudioState>) => {
@@ -1011,11 +1029,11 @@ const App: React.FC = () => {
           sku: 'BADGE-NATIVE',
           qty: state.items.length,
           price: (totalPrice / state.items.length).toFixed(2),
-          totalPrice: totalPrice.toFixed(2),
-          fileData: pdfBase64, // Le fichier PDF
+          totalPrice: totalPrice.toFixed(2), // On garde le format 26.98
+          fileData: pdfBase64,
           fileName: `badge_config_${Date.now()}.pdf`,
           options: {
-            'Configuration': `Matériau: ${state.material}, Finition: ${state.material === MaterialFamily.METAL ? state.metalFinish : state.plasticColor}, Quantité: ${state.items.length} badges.`,
+            'Configuration': `Matériau: ${state.material}, Finition: ${state.material === MaterialFamily.METAL ? state.metalFinish : state.plasticColor}`,
             'Liste des noms': state.items.map(i => `${i.firstName} ${i.lastName}`).join(' | ')
           }
         }
@@ -1814,25 +1832,299 @@ const App: React.FC = () => {
   };
 
   // -------------------- PDF Export (Unified with SVG) --------------------
+  const drawWetagWatermark = (doc: jsPDF) => {
+    if (typeof doc.saveGraphicsState === "function") doc.saveGraphicsState();
+    try {
+      // @ts-ignore
+      if (doc.GState) {
+        // @ts-ignore
+        doc.setGState(new doc.GState({ opacity: 0.04 }));
+      }
+    } catch (e) {}
+    
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(14);
+    doc.setTextColor(0, 100, 150);
+    
+    const text = "Wetag ";
+    const textWidth = doc.getTextWidth(text) || 1;
+    const stepX = textWidth * 1.5;
+    const stepY = 0.4;
+    
+    for (let py = -0.5; py < 11.5; py += stepY) {
+      const row = Math.floor(py / stepY);
+      for (let px = -1; px < 9.5; px += stepX) {
+        doc.text(text, px + (row % 2 === 0 ? 0 : stepX / 2), py, { angle: -20 });
+      }
+    }
+    
+    if (typeof doc.restoreGraphicsState === "function") doc.restoreGraphicsState();
+  };
+
+  const drawWetagPatternBar = (doc: jsPDF, y: number, height: number) => {
+    doc.setFillColor(0, 100, 150);
+    doc.rect(0, y, 8.5, height, "F");
+  };
+
+  const drawPageNumber = (doc: jsPDF, pageNum: number, totalPages: number) => {
+    doc.setFont("Helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(150, 150, 150);
+    doc.text(`Page ${pageNum} / ${totalPages}`, 4.25, 10.4, { align: "center" });
+  };
+
+  const drawPageDimensions = (doc: jsPDF) => {
+    const width = 8.5;
+    const height = 11;
+    const x = width - 0.8;
+    const y = height - 0.8;
+    
+    doc.setDrawColor(180, 180, 180);
+    doc.setLineWidth(0.005);
+    
+    // Horizontal arrow
+    doc.line(x, y, x + 0.4, y);
+    doc.line(x, y, x + 0.06, y - 0.04);
+    doc.line(x, y, x + 0.06, y + 0.04);
+    
+    // Vertical arrow
+    doc.line(x + 0.5, y - 0.1, x + 0.5, y - 0.5);
+    doc.line(x + 0.5, y - 0.5, x + 0.46, y - 0.44);
+    doc.line(x + 0.5, y - 0.5, x + 0.54, y - 0.44);
+    
+    doc.setFontSize(8);
+    doc.setTextColor(180, 180, 180);
+    doc.text("8.5’’", x + 0.2, y + 0.15, { align: "center" });
+    doc.text("11’’", x + 0.65, y - 0.3, { angle: 90, align: "center" });
+    
+    // Add corner lines
+    doc.line(x + 0.5, y, x + 0.5, y + 0.1);
+    doc.line(x + 0.4, y, x + 0.5, y);
+  };
+
+  const getBase64Image = (url: string, maxWidth = 400): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      img.crossOrigin = 'Anonymous';
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth) {
+          height = (maxWidth / width) * height;
+          width = maxWidth;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, width, height);
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.6));
+        } else {
+          reject(new Error('Could not get canvas context'));
+        }
+      };
+      img.onerror = (err) => reject(err);
+      img.src = url;
+    });
+  };
+
+  const drawWetagHeader = async (doc: jsPDF, reorderCode: string) => {
+    const startY = 0.8;
+    
+    try {
+      // Try to load images
+      const [logoBase64, sealBase64] = await Promise.all([
+        getBase64Image('/logo.png').catch(() => null),
+        getBase64Image('/seal.png').catch(() => null)
+      ]);
+
+      if (logoBase64) {
+        // Logo Wetag (using the uploaded image)
+        // Adjusted size and position to match reference
+        doc.addImage(logoBase64, 'JPEG', 0.75, startY - 0.25, 2.4, 0.8, undefined, 'SLOW');
+      } else {
+        // Fallback to manual drawing if image fails
+        const logoX = 0.75;
+        const logoY = startY + 0.2;
+        doc.setFillColor(0, 100, 150);
+        doc.rect(logoX, startY - 0.18, 0.45, 0.45, "F");
+        doc.setFont("Helvetica", "bold");
+        doc.setFontSize(34);
+        doc.setTextColor(255, 255, 255);
+        doc.text("W", logoX + 0.03, logoY - 0.02);
+        doc.setTextColor(0, 100, 150);
+        doc.setFontSize(44);
+        doc.text("e", logoX + 0.46, logoY + 0.03);
+        doc.setTextColor(220, 50, 50);
+        doc.text("tag", logoX + 0.72, logoY + 0.03);
+        doc.setFontSize(10);
+        doc.text("®", logoX + 0.72 + doc.getTextWidth("tag") + 0.02, startY - 0.05);
+      }
+
+      if (sealBase64) {
+        // Canadian Seal (using the uploaded image)
+        // Positioned closer to the logo as per reference
+        doc.addImage(sealBase64, 'JPEG', 3.2, startY - 0.3, 0.9, 0.9, undefined, 'SLOW');
+      } else {
+        // Fallback to manual drawing
+        const sealX = 4.1;
+        const sealY = startY + 0.05;
+        doc.setDrawColor(220, 50, 50);
+        doc.setLineWidth(0.02);
+        doc.circle(sealX, sealY, 0.48, "S");
+        doc.setLineWidth(0.01);
+        doc.circle(sealX, sealY, 0.42, "S");
+        const drawCurvedText = (text: string, centerX: number, centerY: number, radius: number, startAngle: number, isTop: boolean) => {
+          doc.setFont("Helvetica", "bold");
+          doc.setFontSize(5);
+          doc.setTextColor(220, 50, 50);
+          const chars = text.split("");
+          const totalAngle = 80;
+          const step = totalAngle / (chars.length - 1);
+          chars.forEach((char, i) => {
+            const angle = startAngle + (isTop ? 1 : -1) * (i * step - totalAngle / 2);
+            const rad = (angle * Math.PI) / 180;
+            const x = centerX + radius * Math.cos(rad);
+            const y = centerY + radius * Math.sin(rad);
+            const charRotation = angle + 90;
+            doc.text(char, x, y, { align: "center", angle: charRotation });
+          });
+        };
+        drawCurvedText("ORIGINAL", sealX, sealY, 0.36, -90, true);
+        drawCurvedText("ORIGINAL", sealX, sealY, 0.36, 90, false);
+        doc.setFontSize(6);
+        doc.text("*****", sealX, sealY - 0.22, { align: "center" });
+        doc.text("*****", sealX, sealY + 0.28, { align: "center" });
+      }
+    } catch (error) {
+      console.error("Error loading images for PDF:", error);
+    }
+    
+    // Reorder Code Box
+    doc.setDrawColor(0, 100, 150);
+    doc.setLineWidth(0.005);
+    doc.rect(7.1, startY - 0.3, 1.3, 0.8, "S");
+    doc.setFontSize(8);
+    doc.setTextColor(0, 100, 150);
+    doc.setFont("Helvetica", "bold");
+    doc.text("REORDER CODE *:", 7.2, startY - 0.15);
+    doc.setFontSize(20);
+    doc.setFont("Helvetica", "normal");
+    doc.text(reorderCode, 7.2, startY + 0.3);
+  };
+
+  const drawDimensionLine = (doc: jsPDF, x1: number, y1: number, x2: number, y2: number, label: string, isVertical: boolean = false, showArrows: boolean = true, textPos?: 'top' | 'bottom' | 'left' | 'right') => {
+    doc.setDrawColor(180, 180, 180);
+    doc.setLineWidth(0.005);
+    doc.setLineDashPattern([0.05, 0.05], 0);
+    doc.line(x1, y1, x2, y2);
+    
+    // Reset dash for ticks and arrows
+    doc.setLineDashPattern([], 0);
+    
+    // Tick marks
+    const tickSize = 0.05;
+    if (isVertical) {
+      doc.line(x1 - tickSize, y1, x1 + tickSize, y1);
+      doc.line(x2 - tickSize, y2, x2 + tickSize, y2);
+    } else {
+      doc.line(x1, y1 - tickSize, x1, y1 + tickSize);
+      doc.line(x2, y2 - tickSize, x2, y2 + tickSize);
+    }
+    
+    if (showArrows) {
+      const arrowSize = 0.06;
+      if (isVertical) {
+        doc.line(x1, y1, x1 - arrowSize/2, y1 + arrowSize);
+        doc.line(x1, y1, x1 + arrowSize/2, y1 + arrowSize);
+        doc.line(x2, y2, x2 - arrowSize/2, y2 - arrowSize);
+        doc.line(x2, y2, x2 + arrowSize/2, y2 - arrowSize);
+      } else {
+        doc.line(x1, y1, x1 + arrowSize, y1 - arrowSize/2);
+        doc.line(x1, y1, x1 + arrowSize, y1 + arrowSize/2);
+        doc.line(x2, y2, x2 - arrowSize, y2 - arrowSize/2);
+        doc.line(x2, y2, x2 - arrowSize, y2 + arrowSize/2);
+      }
+    }
+    
+    doc.setFontSize(8);
+    doc.setTextColor(100, 100, 100);
+    
+    const pos = textPos || (isVertical ? 'left' : 'top');
+    let textX = (x1 + x2) / 2;
+    let textY = (y1 + y2) / 2;
+    
+    if (pos === 'top') textY = y1 - 0.2;
+    if (pos === 'bottom') textY = y1 + 0.2;
+    if (pos === 'left') textX = x1 - 0.2;
+    if (pos === 'right') textX = x1 + 0.2;
+    
+    if (isVertical) {
+      doc.text(label, textX, textY, { angle: 90, align: "center" });
+    } else {
+      doc.text(label, textX, textY, { align: "center" });
+    }
+  };
+
   const handleExportPDF = async () => {
     setIsExporting(true);
     let step = "Initialisation";
+    const reorderCode = state.reorderCode;
 
     try {
       step = "Préparation des ressources";
       await waitAssetsReady("bat-grid-container");
 
-      step = "Configuration du PDF";
-      const doc = new jsPDF({ orientation: "p", unit: "in", format: "a4" });
+      const reorderTextContent = "The reorder code allows you to quickly order new name tags with a different name. On the back of each name tag you find this number. By using the short online form (wetag.ca/reorder), you will be able to order your new name in less than 2 minutes, even on your smartphone.";
+      const sizeWarningContent = "Size: On the proofs, the name tags are at their real size. To print at the real size, select this option in the Adobe Reader software print settings.";
 
+      step = "Configuration du PDF";
+      const doc = new jsPDF({ orientation: "p", unit: "in", format: "letter" });
+      
       const badgeW = mmToIn(state.dimensions.width);
       const badgeH = mmToIn(state.dimensions.height);
-      const margin = 0.5;
+      
+      // Calculate total pages
+      const productionItems = [];
+      for (const item of state.items) {
+        const qty = item.quantity || 1;
+        for (let q = 0; q < qty; q++) productionItems.push(item);
+      }
+      
+      const badgesPerPage = 12; // Approximation for grid
+      const totalPages = 1 + Math.ceil(productionItems.length / badgesPerPage);
 
-      let xPos = margin;
-      let yPos = margin;
-
-      const dpi = 300;
+      // --- PAGE 1: TECHNICAL PROOF ---
+      step = "Génération de la page 1";
+      // Watermark removed as requested
+      drawWetagPatternBar(doc, 0, 0.5); // Top bar
+      await drawWetagHeader(doc, reorderCode);
+      drawWetagPatternBar(doc, 10.5, 0.5); // Footer bar
+      drawPageDimensions(doc);
+      drawPageNumber(doc, 1, totalPages);
+      
+      // Large background watermark behind badge
+      if (typeof doc.saveGraphicsState === "function") doc.saveGraphicsState();
+      try {
+        // @ts-ignore
+        if (doc.GState) {
+          // @ts-ignore
+          doc.setGState(new doc.GState({ opacity: 0.03 }));
+        }
+      } catch (e) {}
+      
+      if (typeof doc.restoreGraphicsState === "function") doc.restoreGraphicsState();
+      
+      // Badge Preview
+      const previewX = 1.4;
+      const previewY = 2.8;
+      
+      const dpi = 150;
       const canvas = document.createElement("canvas");
       const ctx = canvas.getContext("2d");
       if (!ctx) throw new Error("Canvas context failed");
@@ -1842,21 +2134,121 @@ const App: React.FC = () => {
       canvas.width = pixelW;
       canvas.height = pixelH;
 
+      const firstItem = state.items[0] || { id: "preview", firstName: "JEAN-SÉBASTIEN", lastName: "TREMBLAY", title: "ActivityPro" };
+      const svgEl = document.getElementById(`badge-svg-print-${firstItem.id}`);
+      
+      if (svgEl) {
+        const clonedSvg = svgEl.cloneNode(true) as HTMLElement;
+        clonedSvg.querySelectorAll("text").forEach(t => t.remove());
+        
+        const serializer = new XMLSerializer();
+        let svgXml = serializer.serializeToString(clonedSvg);
+        if (!svgXml.includes('xmlns="http://www.w3.org/2000/svg"')) {
+          svgXml = svgXml.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+        }
+        const svgDataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgXml)));
+        const img = new Image();
+        img.src = svgDataUrl;
+        await new Promise((resolve, reject) => {
+          img.onload = resolve;
+          img.onerror = reject;
+        });
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pixelW, pixelH);
+        ctx.drawImage(img, 0, 0, pixelW, pixelH);
+        const imgData = canvas.toDataURL("image/jpeg", 0.7);
+        
+        doc.setFillColor(255, 255, 255);
+        doc.setDrawColor(220, 50, 50); // Red border for badge preview
+        doc.setLineWidth(0.005);
+        doc.roundedRect(previewX - 0.05, previewY - 0.05, badgeW + 0.1, badgeH + 0.1, 0.2, 0.2, "D");
+        
+        doc.addImage(imgData, "JPEG", previewX, previewY, badgeW, badgeH, undefined, "SLOW");
+      }
+
+      // Dimension lines for badge
+      drawDimensionLine(doc, previewX, previewY + badgeH + 0.4, previewX + badgeW, previewY + badgeH + 0.4, `3” - 76.2 mm`, false, true, 'bottom');
+      drawDimensionLine(doc, previewX - 0.4, previewY, previewX - 0.4, previewY + badgeH, `1.25” - 31.7 mm`, true, true, 'left');
+      
+      // Thickness indicator
+      doc.setDrawColor(180, 180, 180);
+      doc.setLineDashPattern([0.02, 0.02], 0);
+      doc.line(previewX + 0.7, previewY - 0.1, previewX + 0.7, previewY - 0.4);
+      doc.setLineDashPattern([], 0);
+      // Arrow head
+      doc.line(previewX + 0.7, previewY - 0.1, previewX + 0.67, previewY - 0.15);
+      doc.line(previewX + 0.7, previewY - 0.1, previewX + 0.73, previewY - 0.15);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(100, 100, 100);
+      doc.text("1.0 mm / 0.04\"", previewX + 0.7, previewY - 0.5, { align: "center" });
+
+      // Fastener Preview (Magnet)
+      const fastenerX = 6.2;
+      const fastenerY = 3.05;
+      const fastenerW = 1.3;
+      const fastenerH = 0.4;
+      
+      // Draw Magnet
+      doc.setFillColor(30, 30, 30);
+      doc.roundedRect(fastenerX, fastenerY, fastenerW, fastenerH, 0.05, 0.05, "F");
+      doc.setFillColor(60, 60, 60);
+      doc.roundedRect(fastenerX + 0.05, fastenerY + 0.05, fastenerW - 0.1, fastenerH - 0.1, 0.03, 0.03, "F");
+      
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("Helvetica", "normal");
+      doc.text(`Fastener : Magnet`, fastenerX + fastenerW / 2, fastenerY + fastenerH + 0.6, { align: "center" });
+      
+      // Dimension lines for fastener
+      drawDimensionLine(doc, fastenerX, fastenerY - 0.35, fastenerX + fastenerW, fastenerY - 0.35, "1.3” - 33 mm", false, false, 'top');
+      drawDimensionLine(doc, fastenerX + fastenerW + 0.35, fastenerY, fastenerX + fastenerW + 0.35, fastenerY + fastenerH, "0.4” - 11.2 mm", true, false, 'right');
+
+      // Technical Details
+      const detailsX = 1.4;
+      const detailsY = 5.5;
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("Helvetica", "normal");
+      
+      const matName = state.material === 'white' ? 'White aluminum' : 'Brushed aluminum';
+      doc.text(`Material : ${matName}`, detailsX, detailsY);
+      doc.text(`Thickness : 1.0 mm / 0.04"`, detailsX, detailsY + 0.4);
+      doc.text("Quantity : ", detailsX, detailsY + 0.8);
+      
+      // Quantity Box
+      const totalQty = state.items.reduce((sum, item) => sum + (item.quantity || 1), 0);
+      doc.setDrawColor(0, 100, 150);
+      doc.setLineWidth(0.01);
+      doc.rect(detailsX + 1.0, detailsY + 0.65, 0.4, 0.3);
+      doc.text(totalQty.toString(), detailsX + 1.2, detailsY + 0.85, { align: "center" });
+
+      // --- PAGE 2: PRODUCTION GRID ---
+      step = "Génération de la page 2";
+      let currentPage = 2;
+      doc.addPage();
+      // Watermark removed for page 2+ as requested
+      drawWetagPatternBar(doc, 0, 0.5);
+      // Header removed for page 2+ as requested
+      drawWetagPatternBar(doc, 10.5, 0.5);
+      drawPageDimensions(doc);
+      drawPageNumber(doc, currentPage, totalPages);
+      
+      const margin = 0.75;
+      let xPos = margin;
+      let yPos = 0.7; // Start higher since header is removed
+      
       for (let i = 0; i < state.items.length; i++) {
         const item = state.items[i];
         const svgEl = document.getElementById(`badge-svg-print-${item.id}`);
         if (!svgEl) continue;
-
-        step = `Rendu du badge ${i + 1}/${state.items.length}`;
 
         const serializer = new XMLSerializer();
         let svgXml = serializer.serializeToString(svgEl);
         if (!svgXml.includes('xmlns="http://www.w3.org/2000/svg"')) {
           svgXml = svgXml.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
         }
-
         const svgDataUrl = "data:image/svg+xml;base64," + btoa(unescape(encodeURIComponent(svgXml)));
-
         const img = new Image();
         img.src = svgDataUrl;
         await new Promise((resolve, reject) => {
@@ -1864,24 +2256,72 @@ const App: React.FC = () => {
           img.onerror = reject;
         });
 
-        ctx.clearRect(0, 0, pixelW, pixelH);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, pixelW, pixelH);
         ctx.drawImage(img, 0, 0, pixelW, pixelH);
-
-        const imgData = canvas.toDataURL("image/png");
-        doc.addImage(imgData, "PNG", xPos, yPos, badgeW, badgeH, undefined, "FAST");
-
-        xPos += badgeW + margin;
-        if (xPos + badgeW > 7.8) {
-          xPos = margin;
-          yPos += badgeH + margin;
-          if (yPos + badgeH > 10.5 && i < state.items.length - 1) {
-            doc.addPage();
-            yPos = margin;
+        const imgData = canvas.toDataURL("image/jpeg", 0.7);
+        
+        const qty = item.quantity || 1;
+        for (let q = 0; q < qty; q++) {
+          doc.setDrawColor(240, 240, 240);
+          doc.setLineWidth(0.005);
+          doc.roundedRect(xPos - 0.05, yPos - 0.05, badgeW + 0.1, badgeH + 0.1, 0.1, 0.1, "S");
+          doc.addImage(imgData, "JPEG", xPos, yPos, badgeW, badgeH, undefined, "SLOW");
+          
+          xPos += badgeW + 0.3;
+          if (xPos + badgeW > 7.75) {
+            xPos = margin;
+            yPos += badgeH + 0.3;
+            if (yPos + badgeH > 7.0 && (i < state.items.length - 1 || q < qty - 1)) {
+              doc.addPage();
+              currentPage++;
+              // Watermark removed for page 2+ as requested
+              drawWetagPatternBar(doc, 0, 0.5);
+              // Header removed for page 2+ as requested
+              drawWetagPatternBar(doc, 10.5, 0.5);
+              drawPageDimensions(doc);
+              drawPageNumber(doc, currentPage, totalPages);
+              yPos = 0.7;
+              xPos = margin;
+            }
           }
         }
       }
 
+      // Reorder info
+      const bottomY = 7.2; 
+      doc.setFontSize(11);
+      doc.setTextColor(0, 100, 150);
+      doc.setFont("Helvetica", "bold");
+      doc.text("REORDER CODE : *", margin, bottomY);
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(10);
+      doc.setFont("Helvetica", "italic");
+      doc.text(doc.splitTextToSize(reorderTextContent, 7), margin, bottomY + 0.25);
+      
+      doc.setTextColor(220, 50, 50);
+      doc.setFontSize(10);
+      doc.setFont("Helvetica", "italic");
+      doc.text(doc.splitTextToSize(sizeWarningContent, 7), margin, bottomY + 0.9);
+
+      const pdfBase64 = doc.output('datauristring');
       doc.save(`PRODUCTION_WETAG_${Date.now()}.pdf`);
+
+      if (window.parent) {
+        window.parent.postMessage({
+          type: 'WETAG_ADD_TO_CART',
+          payload: {
+            fileData: pdfBase64,
+            fileName: `badge_config_${Date.now()}.pdf`,
+            totalPrice: 0,
+            options: {
+              'Configuration': `Badge ${state.dimensions.width}x${state.dimensions.height}mm - ${state.material}`,
+              'Liste des noms': state.items.map(i => `${i.firstName} ${i.lastName} (${i.quantity})`).join('\n')
+            }
+          }
+        }, '*');
+      }
+
     } catch (err: any) {
       alert(`L'export PDF a échoué à l'étape "${step}": ${err.message}`);
       console.error(err);
@@ -2184,6 +2624,8 @@ const getLayoutClasses = () => {
     const radiusValue = state.roundedCorners ? (isPrint ? `${radius_in}in` : `${radius_in * 100 * scale}px`) : "0px";
 
     const isAccepted = acceptedIds.has((item as any).id);
+    const isBrushed = (state.material === MaterialFamily.METAL && state.metalFinish.toLowerCase().includes("brossé")) ||
+                      (state.material === MaterialFamily.PLASTIC && state.plasticColor.toLowerCase().includes("brossé"));
 
     const getDebugStyle = (ref: React.RefObject<HTMLElement>) => {
       if (!ref.current || !containerRef.current) return {};
@@ -2237,6 +2679,26 @@ const getLayoutClasses = () => {
           <div className="absolute inset-0 z-0 pointer-events-none" style={{ opacity: state.backgroundOpacity }}>
             <img src={state.background} className="w-full h-full object-cover" alt="background" />
           </div>
+        )}
+        {isBrushed && (
+          <div 
+            className="absolute inset-0 pointer-events-none z-[2] opacity-[0.6] mix-blend-overlay" 
+            style={{ 
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.001 0.95' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E")`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }} 
+          />
+        )}
+        {isBrushed && (
+          <div 
+            className="absolute inset-0 pointer-events-none z-[3] opacity-[0.15] mix-blend-multiply" 
+            style={{ 
+              backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100%25' height='100%25'%3E%3Cfilter id='noiseFilter2'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.002 0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter2)'/%3E%3C/svg%3E")`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center'
+            }} 
+          />
         )}
 
         <div className={`w-full h-full flex z-10 ${getLayoutClasses()}`} style={{ gap: isPrint ? `${state.logoGap / 100}in` : `${state.logoGap * scale}px` }}>
@@ -2359,9 +2821,33 @@ const getLayoutClasses = () => {
         </div>
 
         <div className="flex items-center gap-4">
-          <div className="flex items-center px-4 py-2 bg-slate-50 rounded-xl border border-slate-100 shadow-inner">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mr-3">Total</span>
-            <span className="text-lg font-black text-indigo-600">{calculateTotalPrice().toFixed(2)}€</span>
+          <div className={`flex items-center px-5 py-2.5 rounded-xl border-2 transition-all shadow-md ${!state.reorderCode || state.reorderCode.length < 6 ? 'bg-amber-50 border-amber-400 ring-4 ring-amber-500/10' : 'bg-white border-slate-200'}`}>
+            <div className="flex flex-col mr-4">
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
+                Code Recommande <span className="text-red-500 text-xs">*</span>
+              </span>
+              {!state.reorderCode || state.reorderCode.length < 6 ? (
+                <span className="text-[8px] font-bold text-amber-600 uppercase animate-pulse">Obligatoire</span>
+              ) : (
+                <span className="text-[8px] font-bold text-emerald-600 uppercase">Validé</span>
+              )}
+            </div>
+            <input
+              type="text"
+              maxLength={6}
+              value={state.reorderCode}
+              onChange={(e) => updateState({ reorderCode: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+              className="w-32 bg-transparent text-2xl font-black text-indigo-600 outline-none placeholder:text-amber-200 tracking-widest"
+              placeholder="000000"
+            />
+          </div>
+
+          <div className="flex items-center px-5 py-2.5 bg-white rounded-xl border-2 border-slate-100 shadow-md">
+            <div className="flex flex-col mr-4">
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase">TTC</span>
+            </div>
+            <span className="text-2xl font-black text-indigo-600">{calculateTotalPrice().toFixed(2)}€</span>
           </div>
 
           <button

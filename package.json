@@ -11,12 +11,17 @@
   },
   "dependencies": {
     "@google/genai": "^1.44.0",
+    "canvg": "^4.0.3",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.36.0",
     "html2canvas": "^1.4.1",
-    "jspdf": "^4.1.0",
+    "jspdf": "^4.2.0",
     "lucide-react": "^0.563.0",
     "pdfjs-dist": "^5.5.207",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
+    "svg2pdf.js": "^2.7.0",
+    "tailwind-merge": "^3.5.0",
     "xlsx": "0.18.5"
   },
   "devDependencies": {

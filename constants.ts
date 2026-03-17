@@ -26,7 +26,7 @@ export const PLASTIC_COLORS: PlasticColor[] = [
   { name: 'Or Européen / Noir', code: 'LM 922-754', bgColor: '#cfb53b', textColor: '#000000' },
   { name: 'Argent / Noir', code: 'LM 922-334', bgColor: '#e2e8f0', textColor: '#000000' },
   { name: 'Cuivre / Noir', code: 'LM 922-854', bgColor: '#b45309', textColor: '#000000' },
-  { name: 'Or Brossé / Noir', code: 'LM 942-754', bgColor: '#d97706', textColor: '#000000' },
+  { name: 'Or Brossé / Noir', code: 'LM 942-754', bgColor: '#c9b88a', textColor: '#000000' },
   { name: 'Argent Brossé / Noir', code: 'LM 942-334', bgColor: '#cbd5e1', textColor: '#000000' },
   { name: 'Alu Brossé / Noir', code: 'LM 942-314', bgColor: '#94a3b8', textColor: '#000000' },
   { name: 'Bronze / Noir', code: 'LM 922-844', bgColor: '#78350f', textColor: '#000000' },
@@ -84,14 +84,14 @@ export const METAL_FINISHES: MetalFinish[] = [
   },
   { 
     name: 'Or Brossé', 
-    gradient: 'linear-gradient(135deg, #a16207 0%, #fef08a 25%, #854d0e 50%, #fde047 75%, #a16207 100%)', 
-    bgColor: '#eab308', 
+    gradient: 'linear-gradient(135deg, #b5a67a 0%, #d1c49d 25%, #a39468 50%, #c9bc91 75%, #b5a67a 100%)', 
+    bgColor: '#b5a67a', 
     supportsWhite: false 
   },
   { 
     name: 'Cuivre Brossé', 
-    gradient: 'linear-gradient(135deg, #7c2d12 0%, #fdba74 25%, #431407 50%, #fb923c 75%, #7c2d12 100%)', 
-    bgColor: '#c2410c', 
+    gradient: 'linear-gradient(135deg, #b88a66 0%, #d4a787 25%, #9e7555 50%, #c59d7b 75%, #b88a66 100%)', 
+    bgColor: '#b88a66', 
     supportsWhite: false 
   },
   { 
