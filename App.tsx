@@ -64,6 +64,7 @@ import {
   StudioState,
 } from "./types";
 import { PLASTIC_COLORS, METAL_FINISHES, FONTS, DEFAULT_STYLE, PRICING } from "./constants";
+import { Language, translations } from "./translations";
 
 // -------------------- Unit Conversion Helpers --------------------
 const IN_TO_MM = 25.4;
@@ -905,6 +906,18 @@ const App: React.FC = () => {
   // IMPORTANT FIX: raster logo to PNG for html2canvas export reliability
   const [exportLogoPng, setExportLogoPng] = useState<string | null>(null);
   const [coloredLogoUrl, setColoredLogoUrl] = useState<string | null>(null);
+  const [language, setLanguage] = useState<Language>('fr');
+  const t = translations[language];
+
+  const getFinishTranslation = (name: string) => {
+    const map: { [key: string]: string } = {
+      'Argent Brossé': t.argentBrosse,
+      'Or Brossé': t.orBrosse,
+      'Cuivre Brossé': t.cuivreBrosse,
+      'Blanc Sublimation': t.blancSublimation,
+    };
+    return map[name] || name;
+  };
 
   // -------------------- Magento Integration --------------------
   const calculateTotalPrice = () => {
@@ -1747,17 +1760,13 @@ const App: React.FC = () => {
             role: "user",
             parts: [
               {
-                text: `Tu es l'assistant expert de Wetag Studio. Voici l'état actuel de la configuration du badge :
-                - Matériau : ${state.material === MaterialFamily.METAL ? "Métal (" + state.metalFinish + ")" : "Plastique (" + state.plasticColor + ")"}
-                - Forme : ${state.shape === ShapeType.STANDARD ? "Standard" : "Sur Mesure"}
-                - Dimensions : ${state.dimensions.width}x${state.dimensions.height} ${state.dimensions.unit}
-                - Attache : ${state.attachment === AttachmentType.MAGNET ? "Magnétique" : "Épingle"}
-                - Nombre de badges : ${state.items.length}
-                - Badge actuel : ${currentItem.firstName} ${currentItem.lastName} (${currentItem.title})
-                
-                Note importante : Pour le matériau Plastique, l'aperçu à l'écran affiche les couleurs que l'utilisateur a choisies. Cependant, lors de l'exportation (SVG/PDF), les couleurs du texte sont automatiquement forcées à la couleur de gravure réelle du plastique (${state.material === MaterialFamily.PLASTIC ? PLASTIC_COLORS.find(c => c.name === state.plasticColor)?.textColor : "N/A"}) pour garantir un fichier de production correct.
-                
-                Réponds de manière concise et professionnelle.`,
+                text: `${t.aiSystemPrompt}
+                - Material: ${state.material === MaterialFamily.METAL ? "Metal (" + state.metalFinish + ")" : "Plastic (" + state.plasticColor + ")"}
+                - Shape: ${state.shape === ShapeType.STANDARD ? "Standard" : "Custom"}
+                - Dimensions: ${state.dimensions.width}x${state.dimensions.height} ${state.dimensions.unit}
+                - Attachment: ${state.attachment === AttachmentType.MAGNET ? "Magnet" : "Pin"}
+                - Items count: ${state.items.length}
+                - Current badge: ${currentItem.firstName} ${currentItem.lastName} (${currentItem.title})`,
               },
               ...aiMessages.map((m) => ({ role: m.role, parts: [{ text: m.text }] })),
               { role: "user", parts: [{ text: userMsg }] },
@@ -1767,11 +1776,11 @@ const App: React.FC = () => {
       });
 
       const response = await model;
-      const text = response.text || "Désolé, je n'ai pas pu générer de réponse.";
+      const text = response.text || t.aiError;
       setAiMessages((prev) => [...prev, { role: "model", text }]);
     } catch (error) {
       console.error("AI Error:", error);
-      setAiMessages((prev) => [...prev, { role: "model", text: "Une erreur est survenue lors de la communication avec l'IA." }]);
+      setAiMessages((prev) => [...prev, { role: "model", text: t.aiCommunicationError }]);
     } finally {
       setIsAiLoading(false);
     }
@@ -1870,7 +1879,7 @@ const App: React.FC = () => {
     doc.setFont("Helvetica", "normal");
     doc.setFontSize(9);
     doc.setTextColor(150, 150, 150);
-    doc.text(`Page ${pageNum} / ${totalPages}`, 4.25, 10.4, { align: "center" });
+    doc.text(`${t.pdfPage} ${pageNum} / ${totalPages}`, 4.25, 10.4, { align: "center" });
   };
 
   const drawPageDimensions = (doc: jsPDF) => {
@@ -2012,7 +2021,7 @@ const App: React.FC = () => {
     doc.setFontSize(8);
     doc.setTextColor(0, 100, 150);
     doc.setFont("Helvetica", "bold");
-    doc.text("REORDER CODE *:", 7.2, startY - 0.15);
+    doc.text(t.pdfReorderCodeLabel, 7.2, startY - 0.15);
     doc.setFontSize(20);
     doc.setFont("Helvetica", "normal");
     doc.text(reorderCode, 7.2, startY + 0.3);
@@ -2073,17 +2082,17 @@ const App: React.FC = () => {
 
   const handleExportPDF = async () => {
     setIsExporting(true);
-    let step = "Initialisation";
+    let step = t.pdfStepInit;
     const reorderCode = state.reorderCode;
 
     try {
-      step = "Préparation des ressources";
+      step = t.pdfStepAssets;
       await waitAssetsReady("bat-grid-container");
 
-      const reorderTextContent = "The reorder code allows you to quickly order new name tags with a different name. On the back of each name tag you find this number. By using the short online form (wetag.ca/reorder), you will be able to order your new name in less than 2 minutes, even on your smartphone.";
-      const sizeWarningContent = "Size: On the proofs, the name tags are at their real size. To print at the real size, select this option in the Adobe Reader software print settings.";
+      const reorderTextContent = t.pdfReorderText;
+      const sizeWarningContent = t.pdfSizeWarning;
 
-      step = "Configuration du PDF";
+      step = t.pdfStepConfig;
       const doc = new jsPDF({ orientation: "p", unit: "in", format: "letter" });
       
       const badgeW = mmToIn(state.dimensions.width);
@@ -2100,7 +2109,7 @@ const App: React.FC = () => {
       const totalPages = 1 + Math.ceil(productionItems.length / badgesPerPage);
 
       // --- PAGE 1: TECHNICAL PROOF ---
-      step = "Génération de la page 1";
+      step = t.pdfStepPage1;
       // Watermark removed as requested
       drawWetagPatternBar(doc, 0, 0.5); // Top bar
       await drawWetagHeader(doc, reorderCode);
@@ -2198,7 +2207,7 @@ const App: React.FC = () => {
       doc.setFontSize(11);
       doc.setTextColor(0, 0, 0);
       doc.setFont("Helvetica", "normal");
-      doc.text(`Fastener : Magnet`, fastenerX + fastenerW / 2, fastenerY + fastenerH + 0.6, { align: "center" });
+      doc.text(`${t.pdfFastener} : ${state.attachment === AttachmentType.MAGNET ? t.magnet : t.pin}`, fastenerX + fastenerW / 2, fastenerY + fastenerH + 0.6, { align: "center" });
       
       // Dimension lines for fastener
       drawDimensionLine(doc, fastenerX, fastenerY - 0.35, fastenerX + fastenerW, fastenerY - 0.35, "1.3” - 33 mm", false, false, 'top');
@@ -2211,10 +2220,12 @@ const App: React.FC = () => {
       doc.setTextColor(0, 0, 0);
       doc.setFont("Helvetica", "normal");
       
-      const matName = state.material === 'white' ? 'White aluminum' : 'Brushed aluminum';
-      doc.text(`Material : ${matName}`, detailsX, detailsY);
-      doc.text(`Thickness : 1.0 mm / 0.04"`, detailsX, detailsY + 0.4);
-      doc.text("Quantity : ", detailsX, detailsY + 0.8);
+      const matName = state.material === MaterialFamily.METAL 
+        ? getFinishTranslation(state.metalFinish)
+        : state.plasticColor;
+      doc.text(`${t.pdfMaterial} : ${matName}`, detailsX, detailsY);
+      doc.text(`${t.pdfThickness} : 1.0 mm / 0.04"`, detailsX, detailsY + 0.4);
+      doc.text(`${t.pdfQuantity} : `, detailsX, detailsY + 0.8);
       
       // Quantity Box
       const totalQty = state.items.reduce((sum, item) => sum + (item.quantity || 1), 0);
@@ -2224,7 +2235,7 @@ const App: React.FC = () => {
       doc.text(totalQty.toString(), detailsX + 1.2, detailsY + 0.85, { align: "center" });
 
       // --- PAGE 2: PRODUCTION GRID ---
-      step = "Génération de la page 2";
+      step = t.pdfStepPage2;
       let currentPage = 2;
       doc.addPage();
       // Watermark removed for page 2+ as requested
@@ -2293,7 +2304,7 @@ const App: React.FC = () => {
       doc.setFontSize(11);
       doc.setTextColor(0, 100, 150);
       doc.setFont("Helvetica", "bold");
-      doc.text("REORDER CODE : *", margin, bottomY);
+      doc.text(t.pdfReorderCodeLabel, margin, bottomY);
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(10);
       doc.setFont("Helvetica", "italic");
@@ -2315,15 +2326,15 @@ const App: React.FC = () => {
             fileName: `badge_config_${Date.now()}.pdf`,
             totalPrice: 0,
             options: {
-              'Configuration': `Badge ${state.dimensions.width}x${state.dimensions.height}mm - ${state.material}`,
-              'Liste des noms': state.items.map(i => `${i.firstName} ${i.lastName} (${i.quantity})`).join('\n')
+              [t.pdfConfigurationLabel]: `Badge ${state.dimensions.width}x${state.dimensions.height}mm - ${state.material === MaterialFamily.METAL ? t.metal : t.plastic}`,
+              [t.pdfNameListLabel]: state.items.map(i => `${i.firstName} ${i.lastName} (${i.quantity})`).join('\n')
             }
           }
         }, '*');
       }
 
     } catch (err: any) {
-      alert(`L'export PDF a échoué à l'étape "${step}": ${err.message}`);
+      alert(t.pdfExportError.replace("{step}", step).replace("{message}", err.message));
       console.error(err);
     } finally {
       setIsExporting(false);
@@ -2425,7 +2436,7 @@ const App: React.FC = () => {
       link.remove();
       URL.revokeObjectURL(url);
     } catch (err: any) {
-      alert(`Export SVG échoué: ${err.message}`);
+      alert(t.svgExportError.replace("{message}", err.message));
     } finally {
       setIsExporting(false);
     }
@@ -2443,13 +2454,12 @@ const App: React.FC = () => {
   const TypoHint: React.FC<{ field: "firstName" | "lastName" | "title"; item: NametagItem }> = ({ field, item }) => {
     const suggestion = (item as any).typoSuggestions?.[field];
     if (!suggestion || suggestion.dismissed) return null;
-    const isFR = true;
     return (
       <div className="flex flex-col gap-2 mt-2 p-3 bg-indigo-50/50 border border-indigo-100 rounded-xl animate-in shadow-sm">
         <div className="flex items-center gap-2">
           <Sparkles size={14} className="text-indigo-500 fill-indigo-200" />
           <span className="text-[10px] font-bold text-indigo-900 heartbeat leading-tight">
-            {isFR ? `Suggestion : ${suggestion.suggestion} ?` : `Suggestion: ${suggestion.suggestion}?`}
+            {t.suggestion} : {suggestion.suggestion} ?
           </span>
         </div>
         <div className="flex gap-2 justify-end pt-1">
@@ -2457,13 +2467,13 @@ const App: React.FC = () => {
             onClick={() => ignoreTypoSuggestion(field)}
             className="px-3 py-1 bg-white border border-slate-200 text-slate-500 rounded-lg text-[9px] font-black uppercase hover:bg-slate-50 transition-all"
           >
-            {isFR ? "Ignorer" : "Ignore"}
+            {t.ignore}
           </button>
           <button
             onClick={() => applyTypoSuggestion(field, suggestion.suggestion)}
             className="px-4 py-1 bg-indigo-600 text-white rounded-lg text-[9px] font-black uppercase shadow-lg shadow-indigo-200 hover:bg-indigo-700 active:scale-95 transition-all"
           >
-            {isFR ? "Appliquer" : "Apply"}
+            {t.apply}
           </button>
         </div>
       </div>
@@ -2769,7 +2779,7 @@ const getLayoutClasses = () => {
         {!isInternalValid && !isAccepted && !isPrint && !isValidator && (
           <div className="absolute top-2 right-2 bg-red-600 text-white px-2 py-0.5 rounded-full flex items-center gap-1 shadow-xl z-[60] animate-pulse border border-white/20 scale-[0.7] origin-top-right">
             <AlertTriangle size={10} strokeWidth={3} />
-            <span className="text-[8px] font-black uppercase tracking-widest">ERREUR GÉOMÉTRIQUE</span>
+            <span className="text-[8px] font-black uppercase tracking-widest">{t.geometricError}</span>
           </div>
         )}
       </div>
@@ -2815,21 +2825,40 @@ const getLayoutClasses = () => {
           {activeErrorsCount > 0 && (
             <div className="flex items-center gap-2 px-4 py-2 bg-red-50 text-red-600 rounded-full border border-red-200 animate-pulse">
               <AlertTriangle size={14} />
-              <span className="text-[10px] font-black uppercase">{activeErrorsCount} Erreurs détectées</span>
+              <span className="text-[10px] font-black uppercase">{activeErrorsCount} {t.errorsDetected}</span>
             </div>
           )}
         </div>
 
         <div className="flex items-center gap-4">
+          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 shadow-inner">
+            <button
+              onClick={() => setLanguage('fr')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                language === 'fr' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              FR
+            </button>
+            <button
+              onClick={() => setLanguage('en')}
+              className={`px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${
+                language === 'en' ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'
+              }`}
+            >
+              EN
+            </button>
+          </div>
+
           <div className={`flex items-center px-5 py-2.5 rounded-xl border-2 transition-all shadow-md ${!state.reorderCode || state.reorderCode.length < 6 ? 'bg-amber-50 border-amber-400 ring-4 ring-amber-500/10' : 'bg-white border-slate-200'}`}>
             <div className="flex flex-col mr-4">
               <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest flex items-center gap-1">
-                Code Recommande <span className="text-red-500 text-xs">*</span>
+                {t.reorderCode} <span className="text-red-500 text-xs">*</span>
               </span>
               {!state.reorderCode || state.reorderCode.length < 6 ? (
-                <span className="text-[8px] font-bold text-amber-600 uppercase animate-pulse">Obligatoire</span>
+                <span className="text-[8px] font-bold text-amber-600 uppercase animate-pulse">{t.required}</span>
               ) : (
-                <span className="text-[8px] font-bold text-emerald-600 uppercase">Validé</span>
+                <span className="text-[8px] font-bold text-emerald-600 uppercase">{t.validated}</span>
               )}
             </div>
             <input
@@ -2844,8 +2873,8 @@ const getLayoutClasses = () => {
 
           <div className="flex items-center px-5 py-2.5 bg-white rounded-xl border-2 border-slate-100 shadow-md">
             <div className="flex flex-col mr-4">
-              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Total</span>
-              <span className="text-[8px] font-bold text-slate-400 uppercase">TTC</span>
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{t.total}</span>
+              <span className="text-[8px] font-bold text-slate-400 uppercase">{t.taxIncluded}</span>
             </div>
             <span className="text-2xl font-black text-indigo-600">{calculateTotalPrice().toFixed(2)}€</span>
           </div>
@@ -2855,7 +2884,7 @@ const getLayoutClasses = () => {
             className="flex items-center gap-2 px-6 py-3 bg-emerald-600 text-white rounded-xl font-black text-xs uppercase shadow-xl hover:bg-emerald-700 active:scale-95 transition-all"
           >
             <ShoppingCart size={18} />
-            Ajouter au Panier
+            {t.addToCart}
           </button>
 
           <div className="w-px h-8 bg-slate-200 mx-2" />
@@ -2865,13 +2894,13 @@ const getLayoutClasses = () => {
               onClick={() => setExportFormat("pdf")}
               className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase transition-all ${exportFormat === "pdf" ? "bg-white shadow-sm text-indigo-600" : "text-slate-400"}`}
             >
-              PDF Vectoriel
+              {t.pdfVector}
             </button>
             <button
               onClick={() => setExportFormat("svg")}
               className={`px-4 py-2 rounded-lg text-[9px] font-black uppercase transition-all ${exportFormat === "svg" ? "bg-white shadow-sm text-indigo-600" : "text-slate-400"}`}
             >
-              SVG Illustrator
+              {t.svgIllustrator}
             </button>
           </div>
 
@@ -2881,7 +2910,7 @@ const getLayoutClasses = () => {
             className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white rounded-xl font-black text-xs uppercase shadow-xl hover:bg-indigo-700 active:scale-95 transition-all disabled:opacity-60"
           >
             <Download size={18} />
-            {isExporting ? "Export..." : "Export Production"}
+            {isExporting ? t.exporting : t.exportProduction}
           </button>
         </div>
       </nav>
@@ -2891,7 +2920,7 @@ const getLayoutClasses = () => {
         <aside className="w-[380px] bg-white border-r flex flex-col shrink-0 shadow-sm z-10">
           <div className="p-6 border-b space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Série de badges</h3>
+              <h3 className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{t.items}</h3>
               <div className="flex gap-2">
                 <button onClick={() => setIsImportModalOpen(true)} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200 transition-all border shadow-sm">
                   <FileSpreadsheet size={16} />
@@ -2907,7 +2936,7 @@ const getLayoutClasses = () => {
                 <div className="flex flex-col">
                   <input
                     type="text"
-                    placeholder="PRÉNOM"
+                    placeholder={t.nameLabel}
                     value={(currentItem as any).firstName}
                     onChange={(e) => updateCurrentItem({ firstName: e.target.value.toUpperCase() } as any)}
                     className="p-3 bg-white border rounded-xl text-xs font-bold outline-none focus:ring-2 ring-indigo-500/20 shadow-sm"
@@ -2917,7 +2946,7 @@ const getLayoutClasses = () => {
                 <div className="flex flex-col">
                   <input
                     type="text"
-                    placeholder="NOM"
+                    placeholder={t.nameLabel}
                     value={(currentItem as any).lastName}
                     onChange={(e) => updateCurrentItem({ lastName: e.target.value.toUpperCase() } as any)}
                     className="p-3 bg-white border rounded-xl text-xs font-bold outline-none focus:ring-2 ring-indigo-500/20 shadow-sm"
@@ -2929,7 +2958,7 @@ const getLayoutClasses = () => {
               <div className="flex flex-col">
                 <input
                   type="text"
-                  placeholder="Titre / Poste"
+                  placeholder={t.titleLabel}
                   value={(currentItem as any).title}
                   onChange={(e) => updateCurrentItem({ title: e.target.value } as any)}
                   className="w-full p-3 bg-white border rounded-xl text-xs font-bold outline-none focus:ring-2 ring-indigo-500/20 shadow-sm"
@@ -2994,15 +3023,15 @@ const getLayoutClasses = () => {
               <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-6">
                 <AlertTriangle size={40} className="text-red-500" />
               </div>
-              <h2 className="text-red-600 font-black text-xl uppercase tracking-tighter leading-tight mb-4">ZONE DE SÉCURITÉ ENFREINTE</h2>
+              <h2 className="text-red-600 font-black text-xl uppercase tracking-tighter leading-tight mb-4">{t.securityZoneBreached}</h2>
               <p className="text-[11px] text-slate-400 font-bold leading-relaxed uppercase tracking-widest mb-10">
-                ATTENTION : LE TEXTE OU LE LOGO DÉPASSE LES LIMITES PHYSIQUES DU BADGE. AJUSTEZ LA TAILLE OU LES MARGES POUR LA PRODUCTION.
+                {t.securityZoneWarning}
               </p>
               <button
                 onClick={() => setAcceptedIds((p) => new Set(p).add((currentItem as any).id))}
                 className="w-full py-5 bg-emerald-500 text-white rounded-2xl font-black text-[12px] uppercase shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 transition-all active:scale-95 tracking-[0.1em]"
               >
-                IGNORER ET VALIDER
+                {t.ignoreAndValidate}
               </button>
             </div>
           )}
@@ -3040,7 +3069,7 @@ const getLayoutClasses = () => {
               }`}
             >
               <Box size={20} />
-              <span className="text-[9px] font-black uppercase tracking-widest">Produit</span>
+              <span className="text-[9px] font-black uppercase tracking-widest">{t.productTab}</span>
             </button>
             <button
               onClick={() => setActiveTab("logo")}
@@ -3049,7 +3078,7 @@ const getLayoutClasses = () => {
               }`}
             >
               <ImageIcon size={20} />
-              <span className="text-[9px] font-black uppercase tracking-widest">Design</span>
+              <span className="text-[9px] font-black uppercase tracking-widest">{t.designTab}</span>
             </button>
             <button
               onClick={() => setActiveTab("style")}
@@ -3058,7 +3087,7 @@ const getLayoutClasses = () => {
               }`}
             >
               <Type size={20} />
-              <span className="text-[9px] font-black uppercase tracking-widest">Style</span>
+              <span className="text-[9px] font-black uppercase tracking-widest">{t.styleTab}</span>
             </button>
           </div>
 
@@ -3067,7 +3096,7 @@ const getLayoutClasses = () => {
             {activeTab === "product" && (
               <div className="space-y-10">
                 <section>
-                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">Famille & Matériau</label>
+                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">{t.familyAndMaterial}</label>
                   <div className="grid grid-cols-2 gap-4">
                     <button
                       onClick={() => updateState({ material: MaterialFamily.METAL })}
@@ -3083,7 +3112,7 @@ const getLayoutClasses = () => {
                       <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center transition-all ${state.material === MaterialFamily.METAL ? "bg-indigo-600 text-white" : "bg-[#e2e8f0] text-slate-400"}`}>
                         <Zap size={32} fill={state.material === MaterialFamily.METAL ? "currentColor" : "none"} />
                       </div>
-                      <span className={`text-[10px] font-black uppercase tracking-widest ${state.material === MaterialFamily.METAL ? "text-indigo-600" : "text-slate-400"}`}>Métal</span>
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${state.material === MaterialFamily.METAL ? "text-indigo-600" : "text-slate-400"}`}>{t.metal}</span>
                     </button>
 
                     <button
@@ -3100,13 +3129,13 @@ const getLayoutClasses = () => {
                       <div className={`w-16 h-16 rounded-[1.5rem] flex items-center justify-center transition-all ${state.material === MaterialFamily.PLASTIC ? "bg-indigo-600 text-white" : "bg-[#e2e8f0] text-slate-400"}`}>
                         <Palette size={32} />
                       </div>
-                      <span className={`text-[10px] font-black uppercase tracking-widest ${state.material === MaterialFamily.PLASTIC ? "text-indigo-600" : "text-slate-400"}`}>Plastique</span>
+                      <span className={`text-[10px] font-black uppercase tracking-widest ${state.material === MaterialFamily.PLASTIC ? "text-indigo-600" : "text-slate-400"}`}>{t.plastic}</span>
                     </button>
                   </div>
                 </section>
 
                 <section>
-                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">Forme & Coins</label>
+                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">{t.shape}</label>
                   <div className="flex gap-2 p-2 bg-[#f1f5f9] rounded-[2.5rem] border-2 border-slate-100">
                     <button
                       onClick={() => updateState({ shape: ShapeType.STANDARD })}
@@ -3114,7 +3143,7 @@ const getLayoutClasses = () => {
                         state.shape === ShapeType.STANDARD ? "bg-white shadow-lg text-indigo-600" : "text-slate-400"
                       }`}
                     >
-                      Standard
+                      {t.standard}
                     </button>
                     <button
                       onClick={() => updateState({ shape: ShapeType.CUSTOM })}
@@ -3122,7 +3151,7 @@ const getLayoutClasses = () => {
                         state.shape === ShapeType.CUSTOM ? "bg-white shadow-lg text-indigo-600" : "text-slate-400"
                       }`}
                     >
-                      Sur Mesure
+                      {t.custom}
                     </button>
                   </div>
                   {state.shape === ShapeType.CUSTOM && (
@@ -3132,7 +3161,7 @@ const getLayoutClasses = () => {
                         className="w-full flex items-center justify-center gap-3 py-5 bg-indigo-50 text-indigo-600 rounded-[1.5rem] font-black text-[10px] uppercase border-2 border-dashed border-indigo-200"
                       >
                         <Scissors size={20} />
-                        {state.customShape ? "Modifier Forme" : "Importer Forme"}
+                        {state.customShape ? t.modifyShape : t.importShape}
                       </button>
                       <input type="file" ref={shapeInputRef} onChange={handleCustomShapeUpload} className="hidden" accept=".svg,.pdf,image/*" />
                     </div>
@@ -3143,7 +3172,7 @@ const getLayoutClasses = () => {
                   <div className="flex justify-between items-center mb-6">
                     <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 flex items-center gap-2">
                       <Ruler size={14} className="text-slate-400" />
-                      Format Badge
+                      {t.badgeFormat}
                     </label>
                     <div className="flex p-1 bg-[#e2e8f0] rounded-xl border">
                       <button
@@ -3167,7 +3196,7 @@ const getLayoutClasses = () => {
 
                   <div className="grid grid-cols-2 gap-4 bg-[#f1f5f9] p-6 rounded-[2rem] border-2 border-slate-100">
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black uppercase text-slate-400 px-2">Largeur ({state.dimensions.unit})</label>
+                      <label className="text-[9px] font-black uppercase text-slate-400 px-2">{t.width} ({state.dimensions.unit})</label>
                       <input
                         type="text"
                         value={widthInput}
@@ -3177,7 +3206,7 @@ const getLayoutClasses = () => {
                       />
                     </div>
                     <div className="space-y-2">
-                      <label className="text-[9px] font-black uppercase text-slate-400 px-2">Hauteur ({state.dimensions.unit})</label>
+                      <label className="text-[9px] font-black uppercase text-slate-400 px-2">{t.height} ({state.dimensions.unit})</label>
                       <input
                         type="text"
                         value={heightInput}
@@ -3190,7 +3219,7 @@ const getLayoutClasses = () => {
                 </section>
 
                 <section>
-                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">Coins du Badge</label>
+                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">{t.badgeCorners}</label>
                   <div className="flex gap-2 p-2 bg-[#f1f5f9] rounded-[2.5rem] border-2 border-slate-100">
                     <button
                       onClick={() => updateState({ roundedCorners: true })}
@@ -3198,7 +3227,7 @@ const getLayoutClasses = () => {
                         state.roundedCorners ? "bg-white shadow-lg text-indigo-600" : "text-slate-400 hover:text-slate-600"
                       }`}
                     >
-                      Arrondis (0.25")
+                      {t.rounded} (0.25")
                     </button>
                     <button
                       onClick={() => updateState({ roundedCorners: false })}
@@ -3206,14 +3235,14 @@ const getLayoutClasses = () => {
                         !state.roundedCorners ? "bg-white shadow-lg text-indigo-600" : "text-slate-400 hover:text-slate-600"
                       }`}
                     >
-                      Carrés
+                      {t.square}
                     </button>
                   </div>
                 </section>
 
                 <section>
                   <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">
-                    {state.material === MaterialFamily.METAL ? "Finition & Rendu" : "Couleur Plastique"}
+                    {state.material === MaterialFamily.METAL ? t.finishAndRendering : t.plasticColor}
                   </label>
                   {state.material === MaterialFamily.METAL ? (
                     <div className="grid grid-cols-2 gap-4">
@@ -3232,7 +3261,7 @@ const getLayoutClasses = () => {
                             </div>
                           )}
                           <span className="relative bg-white/90 backdrop-blur-sm px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest text-slate-900 shadow-sm border border-white/50">
-                            {f.name.replace(/\s/g, "")}
+                            {getFinishTranslation(f.name)}
                           </span>
                         </button>
                       ))}
@@ -3266,7 +3295,7 @@ const getLayoutClasses = () => {
                 </section>
 
                 <section>
-                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">Type d'Attache</label>
+                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">{t.attachmentType}</label>
                   <div className="flex gap-2 p-2 bg-[#f1f5f9] rounded-[2.5rem] border-2 border-slate-100">
                     <button
                       onClick={() => updateState({ attachment: AttachmentType.MAGNET })}
@@ -3274,7 +3303,7 @@ const getLayoutClasses = () => {
                         state.attachment === AttachmentType.MAGNET ? "bg-white shadow-lg text-indigo-600" : "text-slate-400 hover:text-slate-600"
                       }`}
                     >
-                      Magnétique
+                      {t.magnetic}
                     </button>
                     <button
                       onClick={() => updateState({ attachment: AttachmentType.PIN })}
@@ -3282,7 +3311,7 @@ const getLayoutClasses = () => {
                         state.attachment === AttachmentType.PIN ? "bg-white shadow-lg text-indigo-600" : "text-slate-400 hover:text-slate-600"
                       }`}
                     >
-                      Épingle
+                      {t.pin}
                     </button>
                   </div>
                 </section>
@@ -3293,7 +3322,7 @@ const getLayoutClasses = () => {
             {activeTab === "logo" && (
               <div className="space-y-10">
                 <section>
-                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">Logo Corporatif</label>
+                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">{t.corporateLogo}</label>
                   <div className="flex flex-col gap-4">
                     <label className="w-full flex flex-col items-center justify-center h-44 border-2 border-dashed border-slate-200 rounded-[2.5rem] bg-slate-50 cursor-pointer hover:border-indigo-600 transition-all shadow-inner overflow-hidden">
                       {state.logo ? (
@@ -3301,7 +3330,7 @@ const getLayoutClasses = () => {
                       ) : (
                         <div className="flex flex-col items-center gap-4">
                           <Upload size={24} />
-                          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Importer Logo</span>
+                          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">{t.importLogo}</span>
                         </div>
                       )}
                       <input type="file" onChange={handleLogoUpload} className="hidden" accept=".svg,image/*" />
@@ -3323,7 +3352,7 @@ const getLayoutClasses = () => {
                             className="flex-1 flex items-center justify-center gap-2 py-3 px-6 bg-slate-100 text-slate-600 rounded-2xl font-black text-[10px] uppercase hover:bg-slate-200 transition-all border border-slate-200"
                           >
                             <Eraser size={16} />
-                            Nettoyer BG
+                            {t.cleanBg}
                           </button>
                         )}
                       </div>
@@ -3337,7 +3366,7 @@ const getLayoutClasses = () => {
                               className="flex-1 flex items-center justify-center gap-2 py-3 px-6 bg-indigo-50 text-indigo-600 rounded-2xl font-black text-[10px] uppercase hover:bg-indigo-100 transition-all border border-indigo-200 disabled:opacity-50 shadow-sm"
                             >
                               <Maximize2 size={16} />
-                              {isProcessingRbg ? "Traitement..." : "Remove BG + Fit"}
+                              {isProcessingRbg ? t.processing : "Remove BG + Fit"}
                             </button>
 
                             <button
@@ -3348,22 +3377,22 @@ const getLayoutClasses = () => {
                               }`}
                             >
                               {isVectorizing ? <Loader2 size={16} className="animate-spin" /> : <Maximize size={16} />}
-                              {isLogoVectorized ? "Actualiser Vector" : "Vectoriser Logo"}
+                              {isLogoVectorized ? t.refreshVector : t.vectorizeLogo}
                             </button>
                           </div>
 
                           {isLogoVectorized && (
                             <div className="bg-slate-50 p-6 rounded-[2.5rem] border border-slate-200 animate-in">
-                              <label className="text-[11px] font-black uppercase block mb-4 tracking-[0.2em] text-slate-900">Couleur du Logo (Monocrome)</label>
+                              <label className="text-[11px] font-black uppercase block mb-4 tracking-[0.2em] text-slate-900">{t.logoColorMonochrome}</label>
                               <div className="flex flex-wrap gap-2 items-center mb-4">
                                 <button onClick={() => handleLogoColorChange("#000000")} className="flex-1 py-3 bg-black text-white rounded-xl font-black text-[10px] uppercase shadow-lg">
-                                  Noir
+                                  {t.black}
                                 </button>
                                 <button
                                   onClick={() => handleLogoColorChange("#ffffff")}
                                   className="flex-1 py-3 bg-white text-black border-2 border-slate-200 rounded-xl font-black text-[10px] uppercase shadow-sm"
                                 >
-                                  Blanc
+                                  {t.white}
                                 </button>
                                 <div className="flex-1 h-12 bg-white border-2 border-slate-200 rounded-xl overflow-hidden relative shadow-inner">
                                   <input
@@ -3384,7 +3413,7 @@ const getLayoutClasses = () => {
                           )}
 
                           {(isProcessingRbg || isVectorizing) && (
-                            <p className="text-[9px] font-bold text-indigo-400 text-center uppercase tracking-widest animate-pulse">Traitement haute précision en cours...</p>
+                            <p className="text-[9px] font-bold text-indigo-400 text-center uppercase tracking-widest animate-pulse">{t.processing}</p>
                           )}
                         </div>
                       )}
@@ -3393,7 +3422,7 @@ const getLayoutClasses = () => {
                 </section>
 
                 <section>
-                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">Arrière-plan personnalisé</label>
+                  <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">{t.customBackground}</label>
                   <div className="space-y-4">
                     <label className="w-full flex flex-col items-center justify-center h-44 border-2 border-dashed border-slate-200 rounded-[2.5rem] bg-slate-50 cursor-pointer hover:border-indigo-600 transition-all shadow-inner overflow-hidden">
                       {state.background ? (
@@ -3401,7 +3430,7 @@ const getLayoutClasses = () => {
                       ) : (
                         <div className="flex flex-col items-center gap-4">
                           <ImageIcon size={24} />
-                          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">Importer Fond</span>
+                          <span className="text-[11px] font-black uppercase tracking-widest text-slate-400">{t.importBackground}</span>
                         </div>
                       )}
                       <input type="file" onChange={handleBackgroundUpload} className="hidden" accept="image/*" />
@@ -3410,7 +3439,7 @@ const getLayoutClasses = () => {
                     {state.background && (
                       <div className="space-y-4">
                         <div className="flex items-center gap-4">
-                          <span className="text-[10px] font-black uppercase text-slate-400 w-24">Opacité</span>
+                          <span className="text-[10px] font-black uppercase text-slate-400 w-24">{t.opacity}</span>
                           <input
                             type="range"
                             min="0"
@@ -3422,7 +3451,7 @@ const getLayoutClasses = () => {
                           />
                         </div>
                         <button onClick={() => updateState({ background: null })} className="w-full py-3 bg-red-50 text-red-600 rounded-2xl font-black text-[10px] uppercase border border-red-100">
-                          Retirer Design
+                          {t.removeDesign}
                         </button>
                       </div>
                     )}
@@ -3433,7 +3462,7 @@ const getLayoutClasses = () => {
                   <section className="bg-white rounded-[2.5rem] border border-indigo-100 shadow-2xl p-8 space-y-8">
                     <div className="space-y-6">
                       <div className="flex justify-between items-center">
-                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">Dimension Logo</label>
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">{t.logoDimension}</label>
                         <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">{state.logoScale}%</span>
                       </div>
                       <input
@@ -3448,7 +3477,7 @@ const getLayoutClasses = () => {
 
                     <div className="space-y-6">
                       <div className="flex justify-between items-center">
-                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">Espacement Logo / Texte</label>
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">{t.logoTextSpacing}</label>
                         <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">{state.logoGap}px</span>
                       </div>
                       <input
@@ -3463,7 +3492,7 @@ const getLayoutClasses = () => {
 
                     <div className="space-y-6 border-t pt-6">
                       <div className="flex justify-between items-center">
-                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">Marge logo (bordure)</label>
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">{t.logoMarginBorder}</label>
                         <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-2 py-1 rounded-lg">
                           {formatDimension(state.logoMargin, state.dimensions.unit)} {state.dimensions.unit.toUpperCase()}
                         </span>
@@ -3480,7 +3509,7 @@ const getLayoutClasses = () => {
 
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">
-                          <label className="text-[9px] font-black uppercase text-slate-400 pl-2">Décalage X</label>
+                          <label className="text-[9px] font-black uppercase text-slate-400 pl-2">{t.logoOffset} X</label>
                           <div className="flex items-center gap-2">
                             <button onClick={() => updateLogoState({ logoOffsetX: state.logoOffsetX - 1 })} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200">
                               -
@@ -3493,7 +3522,7 @@ const getLayoutClasses = () => {
                         </div>
 
                         <div className="space-y-2">
-                          <label className="text-[9px] font-black uppercase text-slate-400 pl-2">Décalage Y</label>
+                          <label className="text-[9px] font-black uppercase text-slate-400 pl-2">{t.logoOffset} Y</label>
                           <div className="flex items-center gap-2">
                             <button onClick={() => updateLogoState({ logoOffsetY: state.logoOffsetY - 1 })} className="p-2 bg-slate-100 rounded-lg hover:bg-slate-200">
                               -
@@ -3508,7 +3537,7 @@ const getLayoutClasses = () => {
                     </div>
 
                     <div className="pt-4 border-t">
-                      <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">Positionnement Logo</label>
+                      <label className="text-[11px] font-black uppercase block mb-6 tracking-[0.2em] text-slate-900">{t.logoPositioning}</label>
                       <div className="grid grid-cols-3 gap-3 p-4 bg-slate-50 rounded-[2rem] border shadow-inner">
                         {[
                           { pos: "top-left", icon: MoveUpLeft },
@@ -3551,10 +3580,10 @@ const getLayoutClasses = () => {
                   </div>
                   <div>
                     <h4 className={`text-[11px] font-black uppercase tracking-tighter transition-all duration-300 ${isIndividualMode ? "text-slate-600" : "text-[#854d0e]"}`}>
-                      {isIndividualMode ? "Style Individuel" : "Style Global"}
+                      {isIndividualMode ? t.individualStyle : t.globalStyle}
                     </h4>
                     <p className={`text-[8px] font-bold uppercase transition-all duration-300 ${isIndividualMode ? "text-slate-400" : "text-[#a16207]"}`}>
-                      {isIndividualMode ? "Éditez uniquement ce badge" : "Éditez tous les badges"}
+                      {isIndividualMode ? t.editOnlyThisBadge : t.editAllBadges}
                     </p>
                   </div>
                   <div className="ml-auto flex items-center">
@@ -3569,7 +3598,7 @@ const getLayoutClasses = () => {
 
                 <div className="px-2 space-y-8 pb-20">
                   <section className="space-y-4">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-4">Police de caractères</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-4">{t.fontFamily}</label>
                     <div className="relative group">
                       <select
                         value={activeStyle.fontFamily}
@@ -3589,7 +3618,7 @@ const getLayoutClasses = () => {
                   </section>
 
                   <section className="space-y-4">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-4">Alignement des textes</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-4">{t.textAlignment}</label>
                     <div className="flex gap-1 p-2 bg-[#f1f5f9] rounded-[2rem] border-2 border-slate-100">
                       {(["left", "center", "right"] as const).map((align) => (
                         <button
@@ -3614,8 +3643,8 @@ const getLayoutClasses = () => {
                           <Layout size={20} className="rotate-90" />
                         </div>
                         <div className="ml-4">
-                          <h4 className="text-[11px] font-black uppercase tracking-tighter text-slate-900">Retour à la ligne</h4>
-                          <p className="text-[8px] font-bold uppercase text-slate-400">Multi-ligne dynamique</p>
+                          <h4 className="text-[11px] font-black uppercase tracking-tighter text-slate-900">{t.lineBreak}</h4>
+                          <p className="text-[8px] font-bold uppercase text-slate-400">{t.dynamicMultiline}</p>
                         </div>
                       </div>
                       <button
@@ -3635,12 +3664,12 @@ const getLayoutClasses = () => {
                       <div className="w-10 h-10 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
                         <Type size={18} />
                       </div>
-                      <h3 className="text-[11px] font-black uppercase tracking-widest">Style du Nom</h3>
+                      <h3 className="text-[11px] font-black uppercase tracking-widest">{t.nameStyle}</h3>
                     </div>
 
                     <div className="space-y-4">
                       <div className="flex justify-between items-center px-4">
-                        <label className="text-[9px] font-black uppercase text-slate-400">Taille Police</label>
+                        <label className="text-[9px] font-black uppercase text-slate-400">{t.fontSize}</label>
                         <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">{activeStyle.nameSize}PX</span>
                       </div>
                       <input
@@ -3655,7 +3684,7 @@ const getLayoutClasses = () => {
 
                     <div className="flex items-end gap-4">
                       <div className="flex-1 space-y-3">
-                        <label className="text-[9px] font-black uppercase text-slate-400 px-4">Couleur</label>
+                        <label className="text-[9px] font-black uppercase text-slate-400 px-4">{t.color}</label>
                         <div className="relative h-14 bg-white border-2 border-slate-100 rounded-2xl overflow-hidden shadow-sm hover:border-indigo-600 transition-all">
                           <input
                             type="color"
@@ -3672,7 +3701,7 @@ const getLayoutClasses = () => {
                           activeStyle.bold ? "bg-indigo-600 text-white shadow-xl shadow-indigo-200" : "bg-slate-100 text-slate-400 border border-slate-200"
                         }`}
                       >
-                        Gras
+                        {t.boldText}
                       </button>
                     </div>
                   </section>
@@ -3685,12 +3714,12 @@ const getLayoutClasses = () => {
                       <div className="w-10 h-10 bg-[#1e293b] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-100">
                         <Layout size={18} />
                       </div>
-                      <h3 className="text-[11px] font-black uppercase tracking-widest">Style du Poste</h3>
+                      <h3 className="text-[11px] font-black uppercase tracking-widest">{t.titleStyle}</h3>
                     </div>
 
                     <div className="space-y-4">
                       <div className="flex justify-between items-center px-4">
-                        <label className="text-[9px] font-black uppercase text-slate-400">Taille Police</label>
+                        <label className="text-[9px] font-black uppercase text-slate-400">{t.fontSize}</label>
                         <span className="text-[10px] font-black text-indigo-600 bg-indigo-50 px-3 py-1 rounded-full">{activeStyle.titleSize}PX</span>
                       </div>
                       <input
@@ -3704,7 +3733,7 @@ const getLayoutClasses = () => {
                     </div>
 
                     <div className="space-y-3">
-                      <label className="text-[9px] font-black uppercase text-slate-400 px-4">Couleur</label>
+                      <label className="text-[9px] font-black uppercase text-slate-400 px-4">{t.color}</label>
                       <div className="relative h-14 bg-white border-2 border-slate-100 rounded-2xl overflow-hidden shadow-sm hover:border-slate-400 transition-all">
                         <input
                           type="color"
@@ -3726,12 +3755,12 @@ const getLayoutClasses = () => {
         <div className="flex gap-10">
           <span className="flex items-center gap-2">
             {activeErrorsCount > 0 ? <AlertTriangle size={14} className="text-red-500 animate-pulse" /> : <CheckCircle2 size={14} className="text-emerald-400" />}
-            <span>{activeErrorsCount > 0 ? `${activeErrorsCount} ERREURS DETECTÉES` : "SYSTÈME ZÉRO PIXEL : PRÊT"}</span>
+            <span>{activeErrorsCount > 0 ? `${activeErrorsCount} ${t.errorsDetected}` : t.systemReady}</span>
           </span>
-          <span className="text-slate-400">{state.items.length} BADGES PROGRAMMÉS</span>
+          <span className="text-slate-400">{state.items.length} {t.badgesProgrammed}</span>
         </div>
         <div className="flex items-center gap-3 text-slate-600">
-          <Cpu size={12} className="text-indigo-600 shadow-lg shadow-indigo-500/50" /> WETAG STUDIO PRO — VECTEURS GARANTIS
+          <Cpu size={12} className="text-indigo-600 shadow-lg shadow-indigo-500/50" /> {t.studioPro}
         </div>
       </footer>
 
@@ -3742,7 +3771,7 @@ const getLayoutClasses = () => {
             <header className="p-4 bg-indigo-600 text-white flex justify-between items-center">
               <div className="flex items-center gap-2">
                 <Bot size={20} />
-                <span className="text-xs font-black uppercase tracking-widest">Assistant Wetag</span>
+                <span className="text-xs font-black uppercase tracking-widest">{t.aiAssistant}</span>
               </div>
               <button onClick={() => setIsAiOpen(false)} className="p-1 hover:bg-white/20 rounded-lg transition-all">
                 <X size={16} />
@@ -3755,7 +3784,7 @@ const getLayoutClasses = () => {
                     <Sparkle size={24} />
                   </div>
                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-4">
-                    Posez-moi vos questions sur votre configuration ou demandez des conseils.
+                    {t.aiWelcome}
                   </p>
                 </div>
               )}
@@ -3786,7 +3815,7 @@ const getLayoutClasses = () => {
                 value={aiInput}
                 onChange={(e) => setAiInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleAiChat()}
-                placeholder="Votre question..."
+                placeholder={t.aiPlaceholder}
                 className="flex-1 bg-slate-100 border-none rounded-xl px-4 py-2 text-xs outline-none focus:ring-2 ring-indigo-500/20"
               />
               <button
@@ -3814,7 +3843,7 @@ const getLayoutClasses = () => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-slate-950/70 backdrop-blur-md animate-in">
           <div className="bg-white w-full max-w-3xl rounded-[3rem] shadow-2xl overflow-hidden flex flex-col max-h-[90vh] border border-slate-200">
             <header className="p-8 border-b flex justify-between items-center bg-slate-50">
-              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">Importation Série</h2>
+              <h2 className="text-2xl font-black uppercase tracking-tighter text-slate-900">{t.batchImport}</h2>
               <button onClick={() => setIsImportModalOpen(false)} className="p-3 hover:bg-rose-50 hover:text-rose-600 rounded-2xl transition-all">
                 <X />
               </button>
@@ -3831,8 +3860,8 @@ const getLayoutClasses = () => {
                       <FileSpreadsheet size={32} />
                     </div>
                     <div className="text-center">
-                      <p className="text-[13px] font-black uppercase tracking-widest text-slate-900">Fichier Excel / CSV</p>
-                      <p className="text-[10px] text-slate-400 font-bold mt-2 tracking-widest uppercase">Glisser vos données ici</p>
+                      <p className="text-[13px] font-black uppercase tracking-widest text-slate-900">{t.excelCsvFile}</p>
+                      <p className="text-[10px] text-slate-400 font-bold mt-2 tracking-widest uppercase">{t.dragDataHere}</p>
                     </div>
                     <input type="file" ref={fileInputRef} onChange={handleFileUploadSpreadsheet} className="hidden" accept=".xlsx,.xls,.csv" />
                   </div>
@@ -3848,26 +3877,26 @@ const getLayoutClasses = () => {
                       onClick={handlePasteImport}
                       className="py-5 bg-indigo-600 text-white rounded-[1.5rem] font-black text-[11px] uppercase shadow-xl hover:bg-indigo-700 active:scale-95 transition-all"
                     >
-                      Analyser la liste brute
+                      {t.analyzeRawList}
                     </button>
                   </div>
                 </div>
               ) : (
                 <div className="space-y-8 animate-in">
                   <h3 className="text-[14px] font-black uppercase text-indigo-600 tracking-widest px-1 flex items-center gap-3">
-                    <Layout size={20} /> Mapping des données
+                    <Layout size={20} /> {t.dataMapping}
                   </h3>
                   {["firstName", "lastName", "title"].map((field) => (
                     <div key={field} className="flex items-center justify-between p-6 bg-slate-50 rounded-[2rem] border shadow-sm">
                       <span className="uppercase text-[11px] font-black text-slate-600">
-                        {field === "firstName" ? "Prénom" : field === "lastName" ? "Nom" : "Titre / Poste"}
+                        {field === "firstName" ? t.firstName : field === "lastName" ? t.lastName : t.jobTitle}
                       </span>
                       <select
                         value={mapping[field] ?? ""}
                         onChange={(e) => setMapping({ ...mapping, [field]: parseInt(e.target.value) })}
                         className="p-3 border-2 border-slate-200 rounded-xl text-[11px] font-black uppercase bg-white outline-none focus:ring-4 ring-indigo-500/10 min-w-[180px] shadow-sm"
                       >
-                        <option value="">-- Ignorer --</option>
+                        <option value="">-- {t.ignore} --</option>
                         {importData[0].map((h: any, i: number) => (
                           <option key={i} value={i}>
                             COL {i + 1} : {String(h).substring(0, 15)}
@@ -3882,14 +3911,14 @@ const getLayoutClasses = () => {
 
             <footer className="p-8 bg-slate-50 border-t flex justify-end gap-4">
               <button onClick={() => { setImportData([]); setMapping({}); }} className="px-8 py-4 font-black text-[10px] uppercase text-slate-400 hover:text-slate-600 transition-all tracking-widest">
-                Effacer
+                {t.clear}
               </button>
               <button
                 onClick={finalizeImport}
                 disabled={importData.length === 0}
                 className="px-14 py-6 bg-indigo-600 text-white rounded-[2rem] font-black text-[12px] uppercase shadow-2xl hover:bg-indigo-700 disabled:opacity-50 transition-all tracking-widest"
               >
-                Générer Série Gravure
+                {t.generateEngravingSeries}
               </button>
             </footer>
           </div>
