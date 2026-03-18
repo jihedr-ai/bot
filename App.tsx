@@ -2038,13 +2038,13 @@ const App: React.FC = () => {
         drawCurvedText("ORIGINAL", sealX, sealY, 0.36, -90, true);
         drawCurvedText("ORIGINAL", sealX, sealY, 0.36, 90, false);
 
-        // Maple leaves
+        // Simple stars instead of emojis to avoid encoding issues in jsPDF
         doc.setFontSize(8);
-        doc.text("🍁", sealX - 0.15, sealY - 0.15, { align: "center" });
-        doc.text("🍁", sealX + 0.15, sealY - 0.15, { align: "center" });
-        doc.text("🍁", sealX, sealY - 0.25, { align: "center" });
-        doc.text("🍁", sealX - 0.15, sealY + 0.25, { align: "center" });
-        doc.text("🍁", sealX + 0.15, sealY + 0.25, { align: "center" });
+        doc.text("*", sealX - 0.15, sealY - 0.15, { align: "center" });
+        doc.text("*", sealX + 0.15, sealY - 0.15, { align: "center" });
+        doc.text("*", sealX, sealY - 0.25, { align: "center" });
+        doc.text("*", sealX - 0.15, sealY + 0.25, { align: "center" });
+        doc.text("*", sealX + 0.15, sealY + 0.25, { align: "center" });
 
         // Blue Ribbon
         doc.setFillColor(0, 100, 150);
