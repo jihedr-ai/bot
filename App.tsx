@@ -909,6 +909,30 @@ const App: React.FC = () => {
   const [language, setLanguage] = useState<Language>('fr');
   const t = translations[language];
 
+  const [customFonts, setCustomFonts] = useState<string[]>([]);
+  const fontInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFontUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const fontName = `Custom-${file.name.split(".")[0]}`;
+    const fontUrl = URL.createObjectURL(file);
+
+    const fontFace = new FontFace(fontName, `url(${fontUrl})`);
+    fontFace
+      .load()
+      .then((loadedFace) => {
+        document.fonts.add(loadedFace);
+        setCustomFonts((prev) => [...prev, fontName]);
+        updateStyleSetting({ fontFamily: fontName });
+      })
+      .catch((err) => {
+        console.error("Font load error:", err);
+        alert("Erreur lors du chargement de la police.");
+      });
+  };
+
   const getFinishTranslation = (name: string) => {
     const map: { [key: string]: string } = {
       'Argent Brossé': t.argentBrosse,
@@ -3632,23 +3656,48 @@ const getLayoutClasses = () => {
                 </div>
 
                 <div className="px-2 space-y-8 pb-20">
+                  {/* FONT SECTION (Updated to match screenshot) */}
                   <section className="space-y-4">
-                    <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest pl-4">{t.fontFamily}</label>
-                    <div className="relative group">
-                      <select
-                        value={activeStyle.fontFamily}
-                        onChange={(e) => updateStyleSetting({ fontFamily: e.target.value })}
-                        className="w-full p-5 bg-white border-2 border-slate-100 rounded-[1.5rem] text-[12px] font-black uppercase outline-none focus:border-indigo-600 shadow-sm appearance-none transition-all"
-                      >
-                        {FONTS.map((f) => (
-                          <option key={f} value={f}>
-                            {f}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 group-focus-within:text-indigo-600 transition-all">
-                        <ChevronRight size={18} className="rotate-90" />
+                    <label className="text-[11px] font-black uppercase text-slate-400 tracking-[0.2em] pl-6">
+                      {t.fontLabel}
+                    </label>
+                    <div className="space-y-3 px-2">
+                      <div className="relative group">
+                        <select
+                          value={activeStyle.fontFamily}
+                          onChange={(e) => updateStyleSetting({ fontFamily: e.target.value })}
+                          className="w-full p-6 bg-white border-2 border-slate-50 rounded-[2rem] text-[13px] font-black uppercase outline-none focus:border-indigo-600 shadow-sm appearance-none transition-all cursor-pointer text-center tracking-wider"
+                        >
+                          {FONTS.map((f) => (
+                            <option key={f} value={f}>
+                              {f}
+                            </option>
+                          ))}
+                          {customFonts.map((f) => (
+                            <option key={f} value={f}>
+                              {f}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute right-6 top-1/2 -translate-y-1/2 pointer-events-none text-slate-300 group-focus-within:text-indigo-600 transition-all">
+                          <ChevronRight size={18} />
+                        </div>
                       </div>
+
+                      <button
+                        onClick={() => fontInputRef.current?.click()}
+                        className="w-full py-5 bg-slate-50 text-slate-500 rounded-[2rem] font-black text-[11px] uppercase hover:bg-slate-100 transition-all flex items-center justify-center gap-3 border border-slate-100 shadow-sm group"
+                      >
+                        <Upload size={16} className="group-hover:-translate-y-0.5 transition-transform" />
+                        {t.importFont}
+                      </button>
+                      <input
+                        type="file"
+                        ref={fontInputRef}
+                        onChange={handleFontUpload}
+                        className="hidden"
+                        accept=".ttf,.otf,.woff,.woff2"
+                      />
                     </div>
                   </section>
 
