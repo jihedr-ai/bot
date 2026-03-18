@@ -739,7 +739,7 @@ const NametagSvg: React.FC<{
       xmlns="http://www.w3.org/2000/svg"
       xmlnsXlink="http://www.w3.org/1999/xlink"
       className="badge-svg-render"
-      style={{ display: "block" }}
+      style={{ display: "block", fontFamily: style.fontFamily }}
     >
       <defs>
         <clipPath id={`clip-${item.id}`} clipPathUnits={isCustom ? "objectBoundingBox" : "userSpaceOnUse"}>
@@ -1540,7 +1540,11 @@ const App: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (re) => updateState({ background: re.target?.result as string });
+    reader.onload = (re) => {
+      updateState({ background: re.target?.result as string });
+      // Reset input value to allow re-uploading the same file if needed
+      e.target.value = "";
+    };
     reader.readAsDataURL(file);
   };
 
@@ -1873,6 +1877,28 @@ const App: React.FC = () => {
   const drawWetagPatternBar = (doc: jsPDF, y: number, height: number) => {
     doc.setFillColor(0, 100, 150);
     doc.rect(0, y, 8.5, height, "F");
+    
+    // Watermark pattern
+    doc.setTextColor(255, 255, 255);
+    // @ts-ignore
+    if (doc.GState) {
+      // @ts-ignore
+      doc.saveGraphicsState();
+      // @ts-ignore
+      doc.setGState(new doc.GState({ opacity: 0.1 }));
+    }
+    
+    doc.setFont("Helvetica", "bold");
+    doc.setFontSize(30);
+    for (let i = -1; i < 10; i++) {
+      doc.text("Wetag", i * 1.5, y + height / 2 + 0.1, { angle: 15 });
+    }
+    
+    // @ts-ignore
+    if (doc.restoreGraphicsState) {
+      // @ts-ignore
+      doc.restoreGraphicsState();
+    }
   };
 
   const drawPageNumber = (doc: jsPDF, pageNum: number, totalPages: number) => {
@@ -1943,7 +1969,7 @@ const App: React.FC = () => {
   };
 
   const drawWetagHeader = async (doc: jsPDF, reorderCode: string) => {
-    const startY = 0.8;
+    const startY = 1.3;
     
     try {
       // Try to load images
@@ -1954,35 +1980,40 @@ const App: React.FC = () => {
 
       if (logoBase64) {
         // Logo Wetag (using the uploaded image)
-        // Adjusted size and position to match reference
         doc.addImage(logoBase64, 'JPEG', 0.75, startY - 0.25, 2.4, 0.8, undefined, 'SLOW');
       } else {
         // Fallback to manual drawing if image fails
-        const logoX = 0.75;
-        const logoY = startY + 0.2;
+        const logoX = 1.2;
+        const logoY = startY + 0.25;
+        // Blue box for W
         doc.setFillColor(0, 100, 150);
-        doc.rect(logoX, startY - 0.18, 0.45, 0.45, "F");
+        doc.rect(logoX, startY - 0.22, 0.55, 0.55, "F");
         doc.setFont("Helvetica", "bold");
-        doc.setFontSize(34);
+        doc.setFontSize(38);
         doc.setTextColor(255, 255, 255);
-        doc.text("W", logoX + 0.03, logoY - 0.02);
+        doc.text("W", logoX + 0.04, logoY - 0.02);
+        
+        // "e" in blue
         doc.setTextColor(0, 100, 150);
-        doc.setFontSize(44);
-        doc.text("e", logoX + 0.46, logoY + 0.03);
+        doc.setFontSize(52);
+        doc.text("e", logoX + 0.58, logoY + 0.05);
+        
+        // "tag" in red
         doc.setTextColor(220, 50, 50);
-        doc.text("tag", logoX + 0.72, logoY + 0.03);
+        doc.text("tag", logoX + 0.88, logoY + 0.05);
+        
+        // Trademark symbol
         doc.setFontSize(10);
-        doc.text("®", logoX + 0.72 + doc.getTextWidth("tag") + 0.02, startY - 0.05);
+        doc.text("®", logoX + 0.88 + doc.getTextWidth("tag") + 0.02, startY - 0.05);
       }
 
       if (sealBase64) {
         // Canadian Seal (using the uploaded image)
-        // Positioned closer to the logo as per reference
-        doc.addImage(sealBase64, 'JPEG', 3.2, startY - 0.3, 0.9, 0.9, undefined, 'SLOW');
+        doc.addImage(sealBase64, 'JPEG', 3.8, startY - 0.3, 0.9, 0.9, undefined, 'SLOW');
       } else {
         // Fallback to manual drawing
-        const sealX = 4.1;
-        const sealY = startY + 0.05;
+        const sealX = 4.2;
+        const sealY = startY + 0.1;
         doc.setDrawColor(220, 50, 50);
         doc.setLineWidth(0.02);
         doc.circle(sealX, sealY, 0.48, "S");
@@ -1990,10 +2021,10 @@ const App: React.FC = () => {
         doc.circle(sealX, sealY, 0.42, "S");
         const drawCurvedText = (text: string, centerX: number, centerY: number, radius: number, startAngle: number, isTop: boolean) => {
           doc.setFont("Helvetica", "bold");
-          doc.setFontSize(5);
+          doc.setFontSize(6);
           doc.setTextColor(220, 50, 50);
           const chars = text.split("");
-          const totalAngle = 80;
+          const totalAngle = 90;
           const step = totalAngle / (chars.length - 1);
           chars.forEach((char, i) => {
             const angle = startAngle + (isTop ? 1 : -1) * (i * step - totalAngle / 2);
@@ -2006,9 +2037,28 @@ const App: React.FC = () => {
         };
         drawCurvedText("ORIGINAL", sealX, sealY, 0.36, -90, true);
         drawCurvedText("ORIGINAL", sealX, sealY, 0.36, 90, false);
-        doc.setFontSize(6);
-        doc.text("*****", sealX, sealY - 0.22, { align: "center" });
-        doc.text("*****", sealX, sealY + 0.28, { align: "center" });
+
+        // Maple leaves
+        doc.setFontSize(8);
+        doc.text("🍁", sealX - 0.15, sealY - 0.15, { align: "center" });
+        doc.text("🍁", sealX + 0.15, sealY - 0.15, { align: "center" });
+        doc.text("🍁", sealX, sealY - 0.25, { align: "center" });
+        doc.text("🍁", sealX - 0.15, sealY + 0.25, { align: "center" });
+        doc.text("🍁", sealX + 0.15, sealY + 0.25, { align: "center" });
+
+        // Blue Ribbon
+        doc.setFillColor(0, 100, 150);
+        // Ribbon polygon
+        const ribY = sealY - 0.1;
+        const ribH = 0.25;
+        doc.triangle(sealX - 0.6, ribY, sealX - 0.6, ribY + ribH, sealX - 0.45, ribY + ribH/2, "F");
+        doc.triangle(sealX + 0.6, ribY, sealX + 0.6, ribY + ribH, sealX + 0.45, ribY + ribH/2, "F");
+        doc.rect(sealX - 0.5, ribY, 1.0, ribH, "F");
+        
+        doc.setFontSize(7);
+        doc.setTextColor(255, 255, 255);
+        doc.setFont("Helvetica", "bold");
+        doc.text("100% Canadian", sealX, ribY + 0.17, { align: "center", angle: -10 });
       }
     } catch (error) {
       console.error("Error loading images for PDF:", error);
@@ -2016,15 +2066,14 @@ const App: React.FC = () => {
     
     // Reorder Code Box
     doc.setDrawColor(0, 100, 150);
-    doc.setLineWidth(0.005);
-    doc.rect(7.1, startY - 0.3, 1.3, 0.8, "S");
-    doc.setFontSize(8);
+    doc.setLineWidth(0.01);
+    doc.rect(6.8, startY - 0.3, 1.4, 0.9, "S");
+    doc.setFontSize(9);
     doc.setTextColor(0, 100, 150);
-    doc.setFont("Helvetica", "bold");
-    doc.text(t.pdfReorderCodeLabel, 7.2, startY - 0.15);
-    doc.setFontSize(20);
     doc.setFont("Helvetica", "normal");
-    doc.text(reorderCode, 7.2, startY + 0.3);
+    doc.text("REORDER CODE *:", 6.9, startY - 0.1);
+    doc.setFontSize(14);
+    doc.text(reorderCode, 6.9, startY + 0.2);
   };
 
   const drawDimensionLine = (doc: jsPDF, x1: number, y1: number, x2: number, y2: number, label: string, isVertical: boolean = false, showArrows: boolean = true, textPos?: 'top' | 'bottom' | 'left' | 'right') => {
@@ -2317,21 +2366,6 @@ const App: React.FC = () => {
 
       const pdfBase64 = doc.output('datauristring');
       doc.save(`PRODUCTION_WETAG_${Date.now()}.pdf`);
-
-      if (window.parent) {
-        window.parent.postMessage({
-          type: 'WETAG_ADD_TO_CART',
-          payload: {
-            fileData: pdfBase64,
-            fileName: `badge_config_${Date.now()}.pdf`,
-            totalPrice: 0,
-            options: {
-              [t.pdfConfigurationLabel]: `Badge ${state.dimensions.width}x${state.dimensions.height}mm - ${state.material === MaterialFamily.METAL ? t.metal : t.plastic}`,
-              [t.pdfNameListLabel]: state.items.map(i => `${i.firstName} ${i.lastName} (${i.quantity})`).join('\n')
-            }
-          }
-        }, '*');
-      }
 
     } catch (err: any) {
       alert(t.pdfExportError.replace("{step}", step).replace("{message}", err.message));
@@ -2674,6 +2708,7 @@ const getLayoutClasses = () => {
           clipPath: isCustom ? `url(#${clipId})` : "none",
           border: "none",
           padding: isPrint ? `${margin_in}in` : `${margin_in * 100 * scale}px`,
+          fontFamily: style.fontFamily,
         }}
       >
         {isCustom && (
